@@ -8,7 +8,7 @@ This script is used to run the unit tests by tox of the Weko3 modules.
 `autox.sh [-n] [-k] [-r] [-i] [-w] [module1 module2 ...]`
 
 ### Arguments
-`module1 module2 ...`
+`module1 module2 ...`  
 Specify the module names to run tox.
 If no module is specified, all modules will be ested.
 
