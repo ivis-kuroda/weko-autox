@@ -124,16 +124,16 @@ function main(){
 
     targets=()
     num_args="$#"
-    if [ $i_flag = true ]; then
-        # Option -i is specified
+    if [[ $i_flag = true || " ${@} " =~ " invenio " ]]; then
+        # Option -i or invenio is specified, add invenio modules to the targets
         for module in "${modules[@]}"; do
             if [[ "$module" =~ invenio ]]; then
                 targets+=("$module")
             fi
         done
     fi
-    if [ $w_flag = true ]; then
-        # Option -w is specified
+    if [[ $w_flag = true  || " ${@} " =~ " weko " ]]; then
+        # Option -w or weko is specified, add weko modules to the targets
         for module in "${modules[@]}"; do
             if [[ "$module" =~ weko ]]; then
                 targets+=("$module")
@@ -170,6 +170,7 @@ function main(){
         targets=($(echo "${targets[@]}" | tr ' ' '\n' | grep -v '^$'))
     else
         if [[ " ${@} " =~ " all " ]]; then
+            # if all is specified, add all modules to the targets
             targets=("${modules[@]}")
         else
             for arg in "$@"; do
