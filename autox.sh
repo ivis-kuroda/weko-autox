@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==============================================================================
-# autox.sh
+# autox.sh  ver.1.1.0
 # 2024.10.06
 # Tomohiro KURODA
 #
@@ -11,7 +11,7 @@
 # Usage:
 #   autox.sh [-n] [-k] [-r] [-i] [-w] [all|weko|invenio] [module1 module2 ...]
 #
-# Command:
+# Commands:
 #   * all:     Run tests for all modules.
 #   * invenio: Run tests for all invenio modules.
 #   * weko:    Run tests for all weko modules.
@@ -95,7 +95,7 @@ function main(){
             h)
                 echo "Usage:  autox.sh [-n] [-k] [-r] [-i] [-w] [all|weko|invenio] [module1 module2 ...]"
                 echo ""
-                echo "Command:"
+                echo "Commands:"
                 echo "   all:     Run tests for all modules."
                 echo "   invenio: Run tests for all invenio modules."
                 echo "   weko:    Run tests for all weko modules."
