@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==============================================================================
-# autox.sh
+# autox.sh, verion 1.0.1
 # 2024.10.06
 # Tomohiro KURODA
 #
@@ -194,19 +194,19 @@ function main(){
         # Run tests separately for each file
         if [[ " ${separately[@]} " =~ " $module " ]]; then
             # Run tox in the background to install the packages
-            docker-compose exec -d web sh -c "cd /code/modules/$module; tox > /code/log/$module/test_all.log 2>&1" 2> /dev/null & disown
+            docker-compose exec -d web sh -c "cd /code/modules/$module; tox > /code/log/$module/install.log 2>&1" 2> /dev/null & disown
             printf "\r%$( tput cols )s\rInstalling packeges for the $module."
             sleep 10
             TOX_PIDS=$(docker-compose top web 2>/dev/null | grep 'tox' | awk '{print $2}')
             while [ -n "$TOX_PIDS" ]; do
                 # Check if the installation is completed
-                if grep -q '===='  $CURRENT_DR/log/$module/test_all.log; then
+                if grep -q '===='  $CURRENT_DR/log/$module/install.log; then
                     printf "\r%$( tput cols )s\rInstalling packeges is completed."
                     for PID in $TOX_PIDS; do
                         kill $PID 2>/dev/null
                         wait $PID 2>/dev/null
                     done
-                    rm -f $CURRENT_DR/log/$module/test_all.log
+                    rm -f $CURRENT_DR/log/$module/install.log
                     break
                 fi
                 sleep 10
