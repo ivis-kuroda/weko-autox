@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==============================================================================
-# autox.sh, verion 1.0.1
+# autox.sh, ver.1.1.0
 # 2024.10.06
 # Tomohiro KURODA
 #
@@ -9,16 +9,21 @@
 #   This script is used to run the unit tests by tox of the Weko3 modules.
 #
 # Usage:
-#   autox.sh [-n] [-k] [-r] [-i] [-w] [module1 module2 ...]
+#   autox.sh [-n] [-k] [-r] [-i] [-w] [all|weko|invenio] [module1 module2 ...]
+#
+# Commands:
+#   * all:     Run tests for all modules.
+#   * invenio: Run tests for all invenio modules.
+#   * weko:    Run tests for all weko modules.
 #
 # Arguments:
-#   module1 module2 ...  Specify the module names to run tox.
-#                        If no module is specified, all modules will be tested.
+#   module1 module2 ...  Specify the module names to run tox optionally.
 #
 # Options:
 #   -i  Run tests only the invenio modules.
 #   -w  Run tests only the weko modules.
 #   -n  specify the module names to do not run tox by arguments.
+#       Need to specify the module names to run tox.
 #   -r  Remove the egg-info and .tox directories.
 #       When permission problems occur, use this option.
 #   -k  Stop the tox process.
@@ -33,6 +38,19 @@
 
 # current directory
 CURRENT_DR=$(pwd)
+
+# List of all modules
+modules=()
+for module in $CURRENT_DR/modules/*; do
+    if [ -d "${module}/tests" ]; then
+        modules+=($(basename $module))
+    fi
+done
+# List of modules to be tested separately for each file
+separately=("invenio-records" "weko-admin" "weko-authors" "weko-deposit" \
+            "weko-items-ui" "weko-search-ui" "weko-records" "weko-records-ui" "weko-workflow")
+
+reserved=("all" "invenio" "weko" "-i" "-w" "-n" "-r" "-k" "-h")
 
 # kill the tox process
 function cleanup() {
@@ -49,16 +67,6 @@ function cleanup() {
 trap cleanup INT
 
 function main(){
-    # List of all modules
-    modules=()
-    for module in $CURRENT_DR/modules/*; do
-        if [ -d "${module}/tests" ]; then
-            modules+=($(basename $module))
-        fi
-    done
-    # List of modules to be tested separately for each file
-    separately=("invenio-records" "weko-admin" "weko-authors" "weko-deposit" \
-                "weko-items-ui" "weko-search-ui" "weko-records" "weko-records-ui" "weko-workflow")
 
     n_flag=false
     i_flag=false
@@ -79,26 +87,31 @@ function main(){
                 r_flag=true
                 ;;
             i)
-
                 i_flag=true
                 ;;
             w)
                 w_flag=true
                 ;;
             h)
-                echo "Usage: autox.sh [-n] [-k] [-r] [-i] [-w] [module1 module2 ...]"
+                echo "Usage:  autox.sh [-n] [-k] [-r] [-i] [-w] [all|weko|invenio] [module1 module2 ...]"
+                echo ""
+                echo "Commands:"
+                echo "   all:     Run tests for all modules."
+                echo "   invenio: Run tests for all invenio modules."
+                echo "   weko:    Run tests for all weko modules."
                 echo ""
                 echo "Arguments:"
-                echo "  module1 module2 ...  Specify the module names to run tox."
+                echo "   module1 module2 ...  Specify the module names to run tox."
                 echo "                       If no module is specified, all modules will be tested."
                 echo "Options:"
-                echo "  -i  Run tests only the invenio modules."
-                echo "  -w  Run tests only the weko modules."
-                echo "  -n  specify the module names to do not run tox by arguments."
-                echo "  -r  Remove the egg-info and tox site-packages."
-                echo "      When need to re-install the packages, or permission problems occur, use this option."
-                echo "  -k  Stop the tox process."
-                echo "  -h  Show the help."
+                echo "   -i  Run tests only the invenio modules."
+                echo "   -w  Run tests only the weko modules."
+                echo "   -n  specify the module names to do not run tox by arguments."
+                echo "       Need to specify the module names to run tox."
+                echo "   -r  Remove the egg-info and tox site-packages."
+                echo "       When need to re-install the packages, or permission problems occur, use this option."
+                echo "   -k  Stop the tox process."
+                echo "   -h  Show the help."
                 return 0
                 ;;
             \?)
@@ -111,16 +124,16 @@ function main(){
 
     targets=()
     num_args="$#"
-    if [ $i_flag = true ]; then
-        # Option -i is specified
+    if [[ $i_flag = true || " ${@} " =~ " invenio " ]]; then
+        # Option -i or invenio is specified, add invenio modules to the targets
         for module in "${modules[@]}"; do
             if [[ "$module" =~ invenio ]]; then
                 targets+=("$module")
             fi
         done
     fi
-    if [ $w_flag = true ]; then
-        # Option -w is specified
+    if [[ $w_flag = true  || " ${@} " =~ " weko " ]]; then
+        # Option -w or weko is specified, add weko modules to the targets
         for module in "${modules[@]}"; do
             if [[ "$module" =~ weko ]]; then
                 targets+=("$module")
@@ -128,49 +141,69 @@ function main(){
         done
     fi
 
-    if [ $n_flag = true ]; then
+    if [[ $n_flag = true || " ${@} " =~ " -n " ]]; then
         # Option -n is specified
         if [ ${#targets[@]} == 0 ]; then
             # No arguments provided.
             targets=("${modules[@]}")
         fi
+
         for arg in "$@"; do
-            # check if the name matches
-            if [[ ! " ${targets[@]} " =~ " $arg " ]]; then
-                # do nothing if the module is not in the targets
-                continue
-            fi
             if [[ " ${modules[@]} " =~ " $arg " ]]; then
+                if [[ ! " ${targets[@]} " =~ " $arg " ]]; then
+                    # do nothing if the module is not in the targets
+                    continue
+                fi
+
                 # remove the module if it is in arguments
                 targets=("${targets[@]/$arg/}")
             else
-                echo "$arg is not found."
+                if [[ " ${reserved[@]} " =~ " $arg " ]]; then
+                    continue
+                fi
+
+                echo "unrecognized argument: '$arg'."
                 return 1
             fi
         done
         # remove empty elements
         targets=($(echo "${targets[@]}" | tr ' ' '\n' | grep -v '^$'))
     else
-        for arg in "$@"; do
-            # check if the name matches
-            if [[ " ${targets[@]} " =~ " $arg " ]]; then
-                # do nothing if the module is already in the targets
-                continue
-            fi
-            if [[ " ${modules[@]} " =~ " $arg " ]]; then
-                # add the module if it is in the modules
-                targets+=("$arg")
-            else
-                echo "$arg is not found."
-                return 1
-            fi
-        done
-    fi
-    if [[ ${#targets[@]} -eq 0 ]]; then
-        etargets=("${modules[@]}")
+        if [[ " ${@} " =~ " all " ]]; then
+            # if all is specified, add all modules to the targets
+            targets=("${modules[@]}")
+        else
+            for arg in "$@"; do
+                # check if the name matches
+                if [[ " ${targets[@]} " =~ " $arg " ]]; then
+                    # do nothing if the module is already in the targets
+                    continue
+                fi
+
+                if [[ " ${modules[@]} " =~ " $arg " ]]; then
+                    # add the module if it is in the modules
+                    targets+=("$arg")
+                else
+                    if [[ ! " ${reserved[@]} " =~ " $arg " ]]; then
+                        echo "unrecognized argument: $arg."
+                        return 1
+                    fi
+                fi
+            done
+        fi
     fi
 
-    echo "${#targets[@]} modules found."
+    if [ ${#targets[@]} == 0 ]; then
+        echo "No modules specified."
+        echo "If you want to see usage, please run 'autox.sh -h'."
+        return 1
+    elif [ ${#@} -eq 0 ]; then
+        echo "invalid specifier."
+        echo "If you want to see usage, please run 'autox.sh -h'."
+        return 1
+    else
+        echo "${#targets[@]} modules found."
+    fi
 
     # install tox and tox-setuptools-version
     docker-compose exec web sh -c 'pip3 install tox==3.28; pip3 install tox-setuptools-version' > /dev/null 2>&1
