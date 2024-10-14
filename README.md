@@ -5,7 +5,7 @@ weko auto unit test tool
 This script is unofficial tool for running the unit tests of the Weko3 modules.
 
 ## Usage
-`autox.sh [-n] [-r] [-o output] [-k] [-v] [-h] [all|weko|invenio] [module1 module2 ...]`
+`autox.sh [-n] [-r] [-p module] [-o output] [-k] [-v] [-h] [all|weko|invenio] [target1 target2 ...]`
 
 ### Commands
 * `all`:     Run tests for all modules.
@@ -13,17 +13,37 @@ This script is unofficial tool for running the unit tests of the Weko3 modules.
 * `weko`:    Run tests for all weko modules.
 
 ### Arguments
-`module1 module2 ...` : Specify the module names to run tox optionally.
+`target1 target2 ...` : Specify the module names to run tox optionally.
 
 ### Options
 * `-n`  specify the module names to do not run tox by arguments.
-        Need to specify the module names to run tox.
 * `-r`  Remove the egg-info and .tox directories.
         When permission problems occur, use this option.
+* `-p`  Run tox partially by argument.
+        Need to specify the module names and target function to run tox.
 * `-o`  Specify the output directory for the log files by argument.
 * `-k`  Stop the tox process.
 * `-v`  Show the version.
 * `-h`  Show the help message.
+
+### Example
+* run all modules.
+  ```
+  autox.sh all
+  ```
+* run weko modules without weko-admin.
+  ```
+  autox.sh weko -n weko-admin
+  ```
+* Specify directory to export log.
+  ```
+  autox.sh -o example all
+  ```
+* run tox partially.
+  ```
+  autox.sh -p weko-admin test_api.py::test_is_restricted_user test_tasks.py::test_send_all_reports
+  ```
+  ✔️ Immediately following the -p option is treated as an optional argument, and everything after that is treated as a script argument.
 
 ## Note
 The log files are stored in the log directory.
@@ -32,7 +52,7 @@ The log files are stored in the log directory.
 > The following conditions must be satisfied in order for the progress o be displayed correctly
 > - The display must fit on a single line.
 > - docker does not issue a warning. Create a file in the project root as shown below.
-> 
+>
 >       # .env
 >       ELASTICSEARCH_S3_ACCESS_KEY=
 >       ELASTICSEARCH_S3_SECRET_KEY=
