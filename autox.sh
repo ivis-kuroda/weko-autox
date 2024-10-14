@@ -1,39 +1,17 @@
 #!/bin/bash
 
 # ==============================================================================
-# autox.sh, ver.1.1.0
+# autox.sh, ver.1.1.1
 # 2024.10.06
 # Tomohiro KURODA
 #
 # Description:
-#   This script is used to run the unit tests by tox of the Weko3 modules.
+#   This script is unofficial tool for running the unit tests of the Weko3 modules.
 #
 # Usage:
-#   autox.sh [-n] [-k] [-r] [-i] [-w] [all|weko|invenio] [module1 module2 ...]
+#   autox.sh [-n] [-r] [-o output] [-k] [-v] [-h] [all|weko|invenio] [module1 module2 ...]
 #
-# Commands:
-#   * all:     Run tests for all modules.
-#   * invenio: Run tests for all invenio modules.
-#   * weko:    Run tests for all weko modules.
-#
-# Arguments:
-#   module1 module2 ...  Specify the module names to run tox optionally.
-#
-# Options:
-#   -i  Run tests only the invenio modules.
-#   -w  Run tests only the weko modules.
-#   -n  specify the module names to do not run tox by arguments.
-#       Need to specify the module names to run tox.
-#   -r  Remove the egg-info and .tox directories.
-#       When permission problems occur, use this option.
-#   -k  Stop the tox process.
-#   -h  Show the help message.
-#
-# Note:
-#   * The log files are stored in the log directory.
-#   * The following conditions must be satisfied in order for the progress to be displayed correctly
-#       - docker does not issue a warning.
-#       - The display must fit on a single line.
+# Please refer to the README.md for more information.
 # ==============================================================================
 
 # current directory
@@ -50,7 +28,7 @@ done
 separately=("invenio-records" "weko-admin" "weko-authors" "weko-deposit" \
             "weko-items-ui" "weko-search-ui" "weko-records" "weko-records-ui" "weko-workflow")
 
-reserved=("all" "invenio" "weko" "-i" "-w" "-n" "-r" "-k" "-h")
+reserved=("all" "invenio" "weko" "-i" "-w" "-n" "-r" "-k" "-o" "-v" "-h")
 
 # kill the tox process
 function cleanup() {
@@ -72,9 +50,10 @@ function main(){
     i_flag=false
     w_flag=false
     r_flag=false
+    output=""
     OPTIND=1
     # Parse the options
-    while getopts ":nkriwh" opt; do
+    while getopts "nkriwvho:" opt; do
         case $opt in
             n)
                 n_flag=true
@@ -92,8 +71,15 @@ function main(){
             w)
                 w_flag=true
                 ;;
+            o)
+                output=$OPTARG
+                ;;
+            v)
+                echo "autox.sh - ver.1.1.1"
+                return 0
+                ;;
             h)
-                echo "Usage:  autox.sh [-n] [-k] [-r] [-i] [-w] [all|weko|invenio] [module1 module2 ...]"
+                echo "Usage:  autox.sh [-n] [-r] [-o output] [-k] [-v] [-h] [all|weko|invenio] [module1 module2 ...]"
                 echo ""
                 echo "Commands:"
                 echo "   all:     Run tests for all modules."
@@ -101,17 +87,19 @@ function main(){
                 echo "   weko:    Run tests for all weko modules."
                 echo ""
                 echo "Arguments:"
-                echo "   module1 module2 ...  Specify the module names to run tox."
-                echo "                       If no module is specified, all modules will be tested."
+                echo "   module1 module2 ...  Specify the module names to run tox optionally."
+                echo ""
                 echo "Options:"
-                echo "   -i  Run tests only the invenio modules."
-                echo "   -w  Run tests only the weko modules."
                 echo "   -n  specify the module names to do not run tox by arguments."
                 echo "       Need to specify the module names to run tox."
                 echo "   -r  Remove the egg-info and tox site-packages."
                 echo "       When need to re-install the packages, or permission problems occur, use this option."
+                echo "   -o  Specify the output directory for the log files by argument."
                 echo "   -k  Stop the tox process."
+                echo "   -v  Show the version."
                 echo "   -h  Show the help."
+                echo ""
+                echo "Please refer to the README.md for more information."
                 return 0
                 ;;
             \?)
@@ -193,6 +181,8 @@ function main(){
         fi
     fi
 
+    OUTPUT_DR=""
+    OBSERVE_DR=""
     if [ ${#targets[@]} == 0 ]; then
         echo "No modules specified."
         echo "If you want to see usage, please run 'autox.sh -h'."
@@ -203,6 +193,16 @@ function main(){
         return 1
     else
         echo "${#targets[@]} modules found."
+        if [ $output ]; then
+            OUTPUT_DR="/code/log/$output"
+            OBSERVE_DR="$CURRENT_DR/log/$output"
+            mkdir -p $OBSERVE_DR
+            echo "Output Directory: $CURRENT_DR/log/$output"
+        else
+            OUTPUT_DR="/code/log"
+            OBSERVE_DR="$CURRENT_DR/log"
+            echo "Output Directory: $CURRENT_DR/log"
+        fi
     fi
 
     # install tox and tox-setuptools-version
@@ -212,9 +212,9 @@ function main(){
     i=1
     for module in "${targets[@]}"; do
         printf "\r%$( tput cols )s\rSetup for $module."
-        rm -rf $CURRENT_DR/log/$module
-        mkdir -p $CURRENT_DR/log/$module
-        chown -R 1000:1000 $CURRENT_DR/log
+        rm -rf $OBSERVE_DR/$module
+        mkdir -p $OBSERVE_DR/$module
+        chown -R 1000:1000 $OBSERVE_DR
         # erase the coverage data
         docker-compose exec web sh -c "cd /code/modules/$module; .tox/c1/bin/coverage erase" > /dev/null 2>&1
         cd $CURRENT_DR/modules/$module
@@ -227,19 +227,19 @@ function main(){
         # Run tests separately for each file
         if [[ " ${separately[@]} " =~ " $module " ]]; then
             # Run tox in the background to install the packages
-            docker-compose exec -d web sh -c "cd /code/modules/$module; tox > /code/log/$module/install.log 2>&1" 2> /dev/null & disown
+            docker-compose exec -d web sh -c "cd /code/modules/$module; tox > $OUTPUT_DR/$module/install.log 2>&1" 2> /dev/null & disown
             printf "\r%$( tput cols )s\rInstalling packeges for the $module."
             sleep 10
             TOX_PIDS=$(docker-compose top web 2>/dev/null | grep 'tox' | awk '{print $2}')
             while [ -n "$TOX_PIDS" ]; do
                 # Check if the installation is completed
-                if grep -q '===='  $CURRENT_DR/log/$module/install.log; then
+                if grep -q '===='  $OBSERVE_DR/$module/install.log; then
                     printf "\r%$( tput cols )s\rInstalling packeges is completed."
                     for PID in $TOX_PIDS; do
                         kill $PID 2>/dev/null
                         wait $PID 2>/dev/null
                     done
-                    rm -f $CURRENT_DR/log/$module/install.log
+                    rm -f $OBSERVE_DR/$module/install.log
                     break
                 fi
                 sleep 10
@@ -254,14 +254,14 @@ function main(){
                 file_name=$(basename $file)
                 file_name=${file_name%.py}
                 printf "\r%$( tput cols )s\r    $file_name.py [$((j))/${#files[@]} files]"
-                docker-compose exec web sh -c "cd /code/modules/$module; .tox/c1/bin/pytest --cov=${module//-/\_} tests/$file_name.py -v -vv -s --cov-append --cov-branch --cov-report=term --cov-report=html --basetemp=/code/modules/$module/.tox/c1/tmp --full-trace > /code/log/$module/$file_name.log 2>&1" 2>/dev/null
+                docker-compose exec web sh -c "cd /code/modules/$module; .tox/c1/bin/pytest --cov=${module//-/\_} tests/$file_name.py -v -vv -s --cov-append --cov-branch --cov-report=term --cov-report=html --basetemp=/code/modules/$module/.tox/c1/tmp --full-trace > $OUTPUT_DR/$module/$file_name.log 2>&1" 2>/dev/null
                 ((j++))
             done
             printf "\r\e[1A"
         else
             # Run all tests together.
             printf "\r%$( tput cols )s\rUnit testing of the $module is in progress. [$((i))/${#targets[@]} modules]"
-            docker-compose exec web sh -c "cd /code/modules/$module; tox > /code/log/$module/test_all.log 2>&1" 2>/dev/null
+            docker-compose exec web sh -c "cd /code/modules/$module; tox > $OUTPUT_DR/$module/test_all.log 2>&1" 2>/dev/null
         fi
 
         printf "\r%$( tput cols )s\rUnit testing of the $module had been finished. [$((i))/${#targets[@]} modules]\n"
