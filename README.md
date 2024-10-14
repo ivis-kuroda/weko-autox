@@ -59,11 +59,9 @@ The log files are stored in the log directory.
 >       ELASTICSEARCH_S3_ENDPOINT=
 >       ELASTICSEARCH_S3_BUCKET=
 
-
-
 ## Change Log
 ### ver.1.2.0
-add options: `-p`; :clap: Tests can now be run on a per-function basis  
+add options: `-p`; :clap: Tests can now be run on a per-function basis.  
 Coverage reports are now output after tests.
 
 ### ver.1.1.1
