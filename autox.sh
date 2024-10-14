@@ -1,15 +1,15 @@
 #!/bin/bash
 
 # ==============================================================================
-# autox.sh, ver.1.1.1
-# 2024.10.06
+# autox.sh, ver.1.2.0
+# update 2024.10.15
 # Tomohiro KURODA
 #
 # Description:
 #   This script is unofficial tool for running the unit tests of the Weko3 modules.
 #
 # Usage:
-#   autox.sh [-n] [-r] [-o output] [-k] [-v] [-h] [all|weko|invenio] [module1 module2 ...]
+#   autox.sh [-n] [-r] [-p module] [-o output] [-k] [-v] [-h] [all|weko|invenio] [target1 target2 ...]
 #
 # Please refer to the README.md for more information.
 # ==============================================================================
@@ -46,14 +46,14 @@ trap cleanup INT
 
 function main(){
 
+    targets=()
     n_flag=false
-    i_flag=false
-    w_flag=false
     r_flag=false
+    p_flag=false
     output=""
     OPTIND=1
     # Parse the options
-    while getopts "nkriwvho:" opt; do
+    while getopts "p:nkriwvho:" opt; do
         case $opt in
             n)
                 n_flag=true
@@ -65,21 +65,19 @@ function main(){
             r)
                 r_flag=true
                 ;;
-            i)
-                i_flag=true
-                ;;
-            w)
-                w_flag=true
+            p)
+                p_flag=true
+                targets=($OPTARG)
                 ;;
             o)
                 output=$OPTARG
                 ;;
             v)
-                echo "autox.sh - ver.1.1.1"
+                echo "autox.sh - ver.1.2.0"
                 return 0
                 ;;
             h)
-                echo "Usage:  autox.sh [-n] [-r] [-o output] [-k] [-v] [-h] [all|weko|invenio] [module1 module2 ...]"
+                echo "Usage:  autox.sh [-n] [-r] [-p module] [-o output] [-k] [-v] [-h] [all|weko|invenio] [target1 target2 ...]"
                 echo ""
                 echo "Commands:"
                 echo "   all:     Run tests for all modules."
@@ -87,13 +85,14 @@ function main(){
                 echo "   weko:    Run tests for all weko modules."
                 echo ""
                 echo "Arguments:"
-                echo "   module1 module2 ...  Specify the module names to run tox optionally."
+                echo "   target1 target2 ...  Specify the module names to run tox optionally."
                 echo ""
                 echo "Options:"
                 echo "   -n  specify the module names to do not run tox by arguments."
-                echo "       Need to specify the module names to run tox."
                 echo "   -r  Remove the egg-info and tox site-packages."
                 echo "       When need to re-install the packages, or permission problems occur, use this option."
+                echo "   -p  Run tox partially by argument."
+                echo "       Need to specify the module names and target function to run tox."
                 echo "   -o  Specify the output directory for the log files by argument."
                 echo "   -k  Stop the tox process."
                 echo "   -v  Show the version."
@@ -110,74 +109,75 @@ function main(){
     done
     shift $((OPTIND -1))
 
-    targets=()
-    num_args="$#"
-    if [[ $i_flag = true || " ${@} " =~ " invenio " ]]; then
-        # Option -i or invenio is specified, add invenio modules to the targets
-        for module in "${modules[@]}"; do
-            if [[ "$module" =~ invenio ]]; then
-                targets+=("$module")
-            fi
-        done
-    fi
-    if [[ $w_flag = true  || " ${@} " =~ " weko " ]]; then
-        # Option -w or weko is specified, add weko modules to the targets
-        for module in "${modules[@]}"; do
-            if [[ "$module" =~ weko ]]; then
-                targets+=("$module")
-            fi
-        done
-    fi
-
-    if [[ $n_flag = true || " ${@} " =~ " -n " ]]; then
-        # Option -n is specified
-        if [ ${#targets[@]} == 0 ]; then
-            # No arguments provided.
-            targets=("${modules[@]}")
-        fi
-
-        for arg in "$@"; do
-            if [[ " ${modules[@]} " =~ " $arg " ]]; then
-                if [[ ! " ${targets[@]} " =~ " $arg " ]]; then
-                    # do nothing if the module is not in the targets
-                    continue
-                fi
-
-                # remove the module if it is in arguments
-                targets=("${targets[@]/$arg/}")
-            else
-                if [[ " ${reserved[@]} " =~ " $arg " ]]; then
-                    continue
-                fi
-
-                echo "unrecognized argument: '$arg'."
-                return 1
-            fi
-        done
-        # remove empty elements
-        targets=($(echo "${targets[@]}" | tr ' ' '\n' | grep -v '^$'))
-    else
-        if [[ " ${@} " =~ " all " ]]; then
-            # if all is specified, add all modules to the targets
-            targets=("${modules[@]}")
-        else
-            for arg in "$@"; do
-                # check if the name matches
-                if [[ " ${targets[@]} " =~ " $arg " ]]; then
-                    # do nothing if the module is already in the targets
-                    continue
-                fi
-
-                if [[ " ${modules[@]} " =~ " $arg " ]]; then
-                    # add the module if it is in the modules
-                    targets+=("$arg")
-                else
-                    if [[ ! " ${reserved[@]} " =~ " $arg " ]]; then
-                        echo "unrecognized argument: $arg."
-                        return 1
-                    fi
+    if [ $p_flag = false ]; then
+        num_args="$#"
+        if [[ $i_flag = true || " ${@} " =~ " invenio " ]]; then
+            # Option -i or invenio is specified, add invenio modules to the targets
+            for module in "${modules[@]}"; do
+                if [[ "$module" =~ invenio ]]; then
+                    targets+=("$module")
                 fi
             done
+        fi
+        if [[ $w_flag = true  || " ${@} " =~ " weko " ]]; then
+            # Option -w or weko is specified, add weko modules to the targets
+            for module in "${modules[@]}"; do
+                if [[ "$module" =~ weko ]]; then
+                    targets+=("$module")
+                fi
+            done
+        fi
+
+        if [[ $n_flag = true || " ${@} " =~ " -n " ]]; then
+            # Option -n is specified
+            if [ ${#targets[@]} == 0 ]; then
+                # No arguments provided.
+                targets=("${modules[@]}")
+            fi
+
+            for arg in "$@"; do
+                if [[ " ${modules[@]} " =~ " $arg " ]]; then
+                    if [[ ! " ${targets[@]} " =~ " $arg " ]]; then
+                        # do nothing if the module is not in the targets
+                        continue
+                    fi
+
+                    # remove the module if it is in arguments
+                    targets=("${targets[@]/$arg/}")
+                else
+                    if [[ " ${reserved[@]} " =~ " $arg " ]]; then
+                        continue
+                    fi
+
+                    echo "unrecognized argument: '$arg'."
+                    return 1
+                fi
+            done
+            # remove empty elements
+            targets=($(echo "${targets[@]}" | tr ' ' '\n' | grep -v '^$'))
+        else
+            if [[ " ${@} " =~ " all " ]]; then
+                # if all is specified, add all modules to the targets
+                targets=("${modules[@]}")
+            else
+                for arg in "$@"; do
+                    # check if the name matches
+                    if [[ " ${targets[@]} " =~ " $arg " ]]; then
+                        # do nothing if the module is already in the targets
+                        continue
+                    fi
+
+                    if [[ " ${modules[@]} " =~ " $arg " ]]; then
+                        # add the module if it is in the modules
+                        targets+=("$arg")
+                    else
+                        if [[ ! " ${reserved[@]} " =~ " $arg " ]]; then
+                            echo "unrecognized argument: $arg."
+                            return 1
+                        fi
+                    fi
+                done
+            fi
         fi
     fi
 
@@ -192,7 +192,7 @@ function main(){
         echo "If you want to see usage, please run 'autox.sh -h'."
         return 1
     else
-        echo "${#targets[@]} modules found."
+        echo "${#targets[@]} module(s) found."
         if [ $output ]; then
             OUTPUT_DR="/code/log/$output"
             OBSERVE_DR="$CURRENT_DR/log/$output"
@@ -211,10 +211,12 @@ function main(){
     # loop through all targets subdirectories in the modules directory
     i=1
     for module in "${targets[@]}"; do
-        printf "\r%$( tput cols )s\rSetup for $module."
-        rm -rf $OBSERVE_DR/$module
-        mkdir -p $OBSERVE_DR/$module
-        chown -R 1000:1000 $OBSERVE_DR
+        printf "\r%$( tput cols )s\rSetup for $module. [$((i))/${#targets[@]} module(s)]"
+        if [ $p_flag = false ]; then
+            rm -rf $OBSERVE_DR/$module
+            mkdir -p $OBSERVE_DR/$module
+            chown -R 1000:1000 $OBSERVE_DR
+        fi
         # erase the coverage data
         docker-compose exec web sh -c "cd /code/modules/$module; .tox/c1/bin/coverage erase" > /dev/null 2>&1
         cd $CURRENT_DR/modules/$module
@@ -224,13 +226,22 @@ function main(){
         fi
         sleep 1
 
-        # Run tests separately for each file
-        if [[ " ${separately[@]} " =~ " $module " ]]; then
+        if [ $p_flag = true ]; then
+            # Run tox partially
+            j=1
+            for func in "$@"; do
+                printf "\r%$( tput cols )s\r$func progressing. [$((j))/${#} function(s)]"
+                docker-compose exec web sh -c "cd /code/modules/$module; .tox/c1/bin/pytest --cov=${module//-/\_} tests/$func -v -vv -s --cov-append --cov-branch --cov-report=term --cov-report=html --basetemp=/code/modules/$module/.tox/c1/tmp --full-trace > $OUTPUT_DR/$module/partial$j.log 2>&1" 2>/dev/null
+                printf "\r%$( tput cols )s\r$func finished. [$((j))/${#} function(s)]\n"
+                ((j++))
+            done
+        elif [[ " ${separately[@]} " =~ " $module " ]]; then
             # Run tox in the background to install the packages
             docker-compose exec -d web sh -c "cd /code/modules/$module; tox > $OUTPUT_DR/$module/install.log 2>&1" 2> /dev/null & disown
-            printf "\r%$( tput cols )s\rInstalling packeges for the $module."
+            printf "\r%$( tput cols )s\rInstalling packeges for the $module. [$((i))/${#targets[@]} module(s)]"
             sleep 10
             TOX_PIDS=$(docker-compose top web 2>/dev/null | grep 'tox' | awk '{print $2}')
+            # Run tests separately for each file
             while [ -n "$TOX_PIDS" ]; do
                 # Check if the installation is completed
                 if grep -q '===='  $OBSERVE_DR/$module/install.log; then
@@ -245,7 +256,7 @@ function main(){
                 sleep 10
             done
 
-            printf "\r%$( tput cols )s\r$module progressing. [$((i))/${#targets[@]} modules]\n"
+            printf "\r%$( tput cols )s\r$module progressing. [$((i))/${#targets[@]} module(s)]\n"
             # get the list of test files
             mapfile -t files < <(find "${CURRENT_DR}/modules/${module}/tests" -name "test_*.py")
             j=1
@@ -260,11 +271,14 @@ function main(){
             printf "\r\e[1A"
         else
             # Run all tests together.
-            printf "\r%$( tput cols )s\rUnit testing of the $module is in progress. [$((i))/${#targets[@]} modules]"
+            printf "\r%$( tput cols )s\r$module progressing. [$((i))/${#targets[@]} module(s)]"
             docker-compose exec web sh -c "cd /code/modules/$module; tox > $OUTPUT_DR/$module/test_all.log 2>&1" 2>/dev/null
         fi
 
-        printf "\r%$( tput cols )s\rUnit testing of the $module had been finished. [$((i))/${#targets[@]} modules]\n"
+        coverage=""
+        docker-compose exec web sh -c "cd /code/modules/$module; .tox/c1/bin/coverage report" > $OBSERVE_DR/$module/coverage.log 2> /dev/null
+        coverage=$(cat $OBSERVE_DR/$module/coverage.log | grep TOTAL | awk '{print $NF}')
+        printf "\r%$( tput cols )s\r$module finished. cov: \e[32m$coverage%\e[m [$((i))/${#targets[@]} module(s)]\n"
         ((i++))
     done
 
