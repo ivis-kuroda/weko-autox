@@ -192,7 +192,7 @@ function main(){
         echo "If you want to see usage, please run 'autox.sh -h'."
         return 1
     else
-        echo "${#targets[@]} modules found."
+        echo "${#targets[@]} module(s) found."
         if [ $output ]; then
             OUTPUT_DR="/code/log/$output"
             OBSERVE_DR="$CURRENT_DR/log/$output"
@@ -211,7 +211,7 @@ function main(){
     # loop through all targets subdirectories in the modules directory
     i=1
     for module in "${targets[@]}"; do
-        printf "\r%$( tput cols )s\rSetup for $module."
+        printf "\r%$( tput cols )s\rSetup for $module. [$((i))/${#targets[@]} module(s)]"
         rm -rf $OBSERVE_DR/$module
         mkdir -p $OBSERVE_DR/$module
         chown -R 1000:1000 $OBSERVE_DR
@@ -228,7 +228,7 @@ function main(){
         if [[ " ${separately[@]} " =~ " $module " ]]; then
             # Run tox in the background to install the packages
             docker-compose exec -d web sh -c "cd /code/modules/$module; tox > $OUTPUT_DR/$module/install.log 2>&1" 2> /dev/null & disown
-            printf "\r%$( tput cols )s\rInstalling packeges for the $module."
+            printf "\r%$( tput cols )s\rInstalling packeges for the $module. [$((i))/${#targets[@]} module(s)]"
             sleep 10
             TOX_PIDS=$(docker-compose top web 2>/dev/null | grep 'tox' | awk '{print $2}')
             while [ -n "$TOX_PIDS" ]; do
@@ -245,7 +245,7 @@ function main(){
                 sleep 10
             done
 
-            printf "\r%$( tput cols )s\r$module progressing. [$((i))/${#targets[@]} modules]\n"
+            printf "\r%$( tput cols )s\r$module progressing. [$((i))/${#targets[@]} module(s)]\n"
             # get the list of test files
             mapfile -t files < <(find "${CURRENT_DR}/modules/${module}/tests" -name "test_*.py")
             j=1
@@ -260,11 +260,15 @@ function main(){
             printf "\r\e[1A"
         else
             # Run all tests together.
-            printf "\r%$( tput cols )s\rUnit testing of the $module is in progress. [$((i))/${#targets[@]} modules]"
+            printf "\r%$( tput cols )s\r$module progressing. [$((i))/${#targets[@]} module(s)]"
             docker-compose exec web sh -c "cd /code/modules/$module; tox > $OUTPUT_DR/$module/test_all.log 2>&1" 2>/dev/null
         fi
 
-        printf "\r%$( tput cols )s\rUnit testing of the $module had been finished. [$((i))/${#targets[@]} modules]\n"
+        coverage=""
+        docker-compose exec web sh -c "cd /code/modules/$module; .tox/c1/bin/coverage report" > $OBSERVE_DR/$module/coverage.log 2>&1
+        coverage=$(cat $OBSERVE_DR/$module/coverage.log | grep TOTAL | awk '{print $NF}')
+        # echo "$module: ${coverage//%/}%"
+        printf "\r%$( tput cols )s\r$module finished. cov: \e[32m$coverage%\e[m [$((i))/${#targets[@]} module(s)]\n"
         ((i++))
     done
 
