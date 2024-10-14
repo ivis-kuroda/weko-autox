@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # ==============================================================================
-# autox.sh, ver.1.1.1
-# 2024.10.06
+# autox.sh, ver.1.2.0
+# update 2024.10.15
 # Tomohiro KURODA
 #
 # Description:
@@ -73,7 +73,7 @@ function main(){
                 output=$OPTARG
                 ;;
             v)
-                echo "autox.sh - ver.1.1.1"
+                echo "autox.sh - ver.1.2.0"
                 return 0
                 ;;
             h)
@@ -276,9 +276,8 @@ function main(){
         fi
 
         coverage=""
-        docker-compose exec web sh -c "cd /code/modules/$module; .tox/c1/bin/coverage report" > $OBSERVE_DR/$module/coverage.log 2>&1
+        docker-compose exec web sh -c "cd /code/modules/$module; .tox/c1/bin/coverage report" > $OBSERVE_DR/$module/coverage.log 2> /dev/null
         coverage=$(cat $OBSERVE_DR/$module/coverage.log | grep TOTAL | awk '{print $NF}')
-        # echo "$module: ${coverage//%/}%"
         printf "\r%$( tput cols )s\r$module finished. cov: \e[32m$coverage%\e[m [$((i))/${#targets[@]} module(s)]\n"
         ((i++))
     done

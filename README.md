@@ -1,4 +1,4 @@
-# weko-autox ver.1.1.1
+# weko-autox ver.1.2.0
 weko auto unit test tool
 
 ## Description
@@ -62,6 +62,10 @@ The log files are stored in the log directory.
 
 
 ## Change Log
+### ver.1.2.0
+add options: `-p`; :clap: Tests can now be run on a per-function basis  
+Coverage reports are now output after tests.
+
 ### ver.1.1.1
 delete options: `-i` and `-w`.  
 add options: `-o`; specify the output directory for the log files. `-v`; show the version.
