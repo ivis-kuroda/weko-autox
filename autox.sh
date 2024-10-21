@@ -214,8 +214,10 @@ function main(){
         printf "\r%$( tput cols )s\rSetup for $module. [$((i))/${#targets[@]} module(s)]"
         if [ $p_flag = false ]; then
             rm -rf $OBSERVE_DR/$module
-            mkdir -p $OBSERVE_DR/$module
             chown -R 1000:1000 $OBSERVE_DR
+        fi
+        if [ ! -d "$OBSERVE_DR/$module" ]; then
+            mkdir -p $OBSERVE_DR/$module
         fi
         # erase the coverage data
         docker-compose exec web sh -c "cd /code/modules/$module; .tox/c1/bin/coverage erase" > /dev/null 2>&1
