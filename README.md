@@ -39,6 +39,7 @@ This script is unofficial tool for running the unit tests of the Weko3 modules.
   ```
   autox.sh -o example all
   ```
+  ✔️ Test logs are output to log/ by default. Optionally, output can be specified to any directory under log/.
 * run tox partially.
   ```
   autox.sh -p weko-admin test_api.py::test_is_restricted_user test_tasks.py::test_send_all_reports
