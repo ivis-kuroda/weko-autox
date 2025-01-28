@@ -267,7 +267,7 @@ function main(){
                 file_name=$(basename $file)
                 file_name=${file_name%.py}
                 printf "\r%$( tput cols )s\r    $file_name.py [$((j))/${#files[@]} files]"
-                docker-compose exec web sh -c "cd /code/modules/$module; .tox/c1/bin/pytest --cov=${module//-/\_} tests/$file_name.py -v -vv -s --cov-append --cov-branch --cov-report=term --cov-report=html --basetemp=/code/modules/$module/.tox/c1/tmp --full-trace > $OUTPUT_DR/$module/$file_name.log 2>&1" 2>/dev/null
+                docker-compose exec web sh -c "cd /code/modules/$module; .tox/c1/bin/pytest --cov=${module//-/\_} tests/$file_name.py -v --cov-append --cov-branch --cov-report=term --cov-report=html --basetemp=/code/modules/$module/.tox/c1/tmp --full-trace > $OUTPUT_DR/$module/$file_name.log 2>&1" 2>/dev/null
                 ((j++))
             done
             printf "\r\e[1A"
