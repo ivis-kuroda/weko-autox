@@ -4,6 +4,15 @@ weko auto unit test tool
 ## Description
 This script is unofficial tool for running the unit tests of the Weko3 modules.
 
+## Install
+```shell
+$ cd weko
+$ git clone https://github.com/ivis-kuroda/weko-autox.git auto
+$ ln -s auto/autox.sh autox
+$ ./autox -v
+autox.sh - ver.1.2.0
+```
+
 ## Usage
 `autox.sh [-n] [-r] [-p module] [-o output] [-k] [-v] [-h] [all|weko|invenio] [target1 target2 ...]`
 
