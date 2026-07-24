@@ -36,13 +36,7 @@ jobs:
           set -euo pipefail
 
           head_ref="${{ github.event.pull_request.head.ref }}"
-          semver_release_re='^release/((0|[1-9][0-9]*)\.'\
-            '(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)'\
-            '(-((0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)'\
-            '(\.(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*))?'\
-            '(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?)$'
-
-          if [[ "$head_ref" =~ $semver_release_re ]]; then
+          if [[ "$head_ref" =~ ^release/((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?)$ ]]; then
             version="${BASH_REMATCH[1]}"
           else
             echo "This workflow expects PR head branch name release/<semver>."
@@ -81,11 +75,27 @@ jobs:
       - name: Run tests
         run: go test ./...
 
+      - name: Prepare release notes from PR description
+        shell: bash
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+
+          notes_file="release-notes.md"
+          {
+            if [[ -n "${PR_BODY}" ]]; then
+              echo "${PR_BODY}"
+            else
+              echo "No PR description was provided."
+            fi
+          } > "$notes_file"
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: latest
-          args: release --clean
+          args: release --clean --release-notes release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
