@@ -12,6 +12,7 @@ import (
 	containertypes "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 )
 
 type ExecResult struct {
@@ -69,12 +70,13 @@ func (c *Client) Close() error {
 
 func (c *Client) Exec(ctx context.Context, shellCommand string) (ExecResult, error) {
 	var stdout bytes.Buffer
+	var stderr bytes.Buffer
 
 	execResp, err := c.docker.ContainerExecCreate(ctx, c.containerID, containertypes.ExecOptions{
 		Cmd:          []string{"sh", "-lc", shellCommand},
 		AttachStdout: true,
 		AttachStderr: true,
-		Tty:          true,
+		Tty:          false,
 	})
 	if err != nil {
 		return ExecResult{}, fmt.Errorf("create exec: %w", err)
@@ -86,7 +88,7 @@ func (c *Client) Exec(ctx context.Context, shellCommand string) (ExecResult, err
 	}
 	defer attachResp.Close()
 
-	if _, err := io.Copy(&stdout, attachResp.Reader); err != nil && err != io.EOF {
+	if _, err := stdcopy.StdCopy(&stdout, &stderr, attachResp.Reader); err != nil && err != io.EOF {
 		return ExecResult{}, fmt.Errorf("read exec output: %w", err)
 	}
 
@@ -97,7 +99,7 @@ func (c *Client) Exec(ctx context.Context, shellCommand string) (ExecResult, err
 
 	result := ExecResult{
 		Stdout:   stdout.String(),
-		Stderr:   "",
+		Stderr:   stderr.String(),
 		ExitCode: inspect.ExitCode,
 	}
 	if result.ExitCode != 0 {
