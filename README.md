@@ -23,10 +23,10 @@ The command behavior is based on the previous shell script, with the following i
 
 Download a release asset from GitHub Releases and place `autox` in your `PATH`.
 
-Example for Linux amd64 (`v2.0.0-alpha.1`):
+Example for Linux amd64 (`v2.0.0-alpha.2`):
 
 ```bash
-VERSION="v2.0.0-alpha.1"
+VERSION="v2.0.0-alpha.2"
 curl -fL -o /tmp/autox.tar.gz \
   "https://github.com/ivis-kuroda/weko-autox/releases/download/${VERSION}/autox_${VERSION#v}_linux_amd64.tar.gz"
 tar -xzf /tmp/autox.tar.gz -C /tmp
@@ -228,7 +228,8 @@ This project has been migrated from `autox.sh` to the Go-based `autox` CLI.
 
 
 ## Change Log
-### v2.0.0-alpha.1
+### v2.0.0-alpha.1 / v2.0.0-alpha.2
+- Note: There is no functional difference between `v2.0.0-alpha.1` and `v2.0.0-alpha.2`. `v2.0.0-alpha.2` exists because the `v2.0.0-alpha.1` release failed during release automation.
 - Migrate runtime from shell script to Go CLI (`autox`).
 - Add binary-first usage and release distribution flow.
 - Add GitHub Actions + GoReleaser automation for release artifacts.
