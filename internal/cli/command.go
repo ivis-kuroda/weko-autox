@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const versionString = "autox - dev"
+var versionString = "dev"
 
 func ParseArgs(args []string) (Config, error) {
 	var cfg Config
@@ -82,7 +82,7 @@ func Execute(ctx context.Context, out io.Writer, args []string, run func(context
 
 	if cfg.Help || cfg.Version {
 		if cfg.Version {
-			_, _ = fmt.Fprintln(out, versionString)
+			_, _ = fmt.Fprintf(out, "autox - %s\n", versionString)
 		}
 		return nil
 	}
