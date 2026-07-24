@@ -1,4 +1,4 @@
-# weko-autox ver.1.2.0
+# weko-autox v1.2.1
 weko auto unit test tool
 
 ## Description
@@ -10,7 +10,7 @@ $ cd weko
 $ git clone https://github.com/ivis-kuroda/weko-autox.git auto
 $ ln -s auto/autox.sh autox
 $ ./autox -v
-autox.sh - ver.1.2.0
+autox.sh - v1.2.1
 ```
 
 ## Usage
@@ -70,6 +70,12 @@ The log files are stored in the log directory.
 >       ELASTICSEARCH_S3_BUCKET=
 
 ## Change Log
+### v1.2.1
+fix: create log directories only when needed to avoid failures during partial test runs.  
+change: suppress excessive per-file pytest logging when running modules separately.  
+docs: add installation steps.  
+change: adopt semantic version notation for the version display in preparation for the Go implementation.
+
 ### ver.1.2.0
 add options: `-p`; :clap: Tests can now be run on a per-function basis.  
 Coverage reports are now output after tests.
