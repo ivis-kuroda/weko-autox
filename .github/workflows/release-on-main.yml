@@ -76,13 +76,14 @@ jobs:
         run: go test ./...
 
       - name: Prepare release notes from PR description
+        id: notes
         shell: bash
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           set -euo pipefail
 
-          notes_file="release-notes.md"
+          notes_file="$(mktemp /tmp/release-notes.XXXXXX.md)"
           {
             if [[ -n "${PR_BODY}" ]]; then
               echo "${PR_BODY}"
@@ -91,11 +92,13 @@ jobs:
             fi
           } > "$notes_file"
 
+          echo "file=$notes_file" >> "$GITHUB_OUTPUT"
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: latest
-          args: release --clean --release-notes release-notes.md
+          args: release --clean --release-notes "${{ steps.notes.outputs.file }}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
