@@ -44,8 +44,11 @@ func (r Runner) Run(ctx context.Context, cfg cli.Config) error {
 		if err := r.prepareModuleLogDir(m.Name, cfg.OutputDirName); err != nil {
 			return err
 		}
+		if err := cleanModuleBuildArtifacts(m.Path, m.Name); err != nil {
+			return err
+		}
 		if cfg.Clean {
-			if err := cleanLocalArtifacts(m.Path, m.Name); err != nil {
+			if err := cleanResetArtifacts(m.Path); err != nil {
 				return err
 			}
 		}
@@ -175,9 +178,21 @@ func moduleLogDir(workspace string, outputName string, moduleName string) string
 	return filepath.Join(workspace, "log", outputName, moduleName)
 }
 
-func cleanLocalArtifacts(modulePath string, moduleName string) error {
+func cleanModuleBuildArtifacts(modulePath string, moduleName string) error {
 	paths := []string{
 		filepath.Join(modulePath, moduleName+".egg-info"),
+		filepath.Join(modulePath, ".eggs"),
+	}
+	for _, p := range paths {
+		if err := os.RemoveAll(p); err != nil {
+			return fmt.Errorf("remove %s: %w", p, err)
+		}
+	}
+	return nil
+}
+
+func cleanResetArtifacts(modulePath string) error {
+	paths := []string{
 		filepath.Join(modulePath, ".tox"),
 		filepath.Join(modulePath, "htmlcov"),
 		filepath.Join(modulePath, "coverage.xml"),
