@@ -36,6 +36,7 @@ checksum:
 release:
   draft: false
   prerelease: false
+  name_template: "{{ .ProjectName }} v{{ .Version }}"
 
 changelog:
   use: git

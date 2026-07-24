@@ -1,4 +1,4 @@
-# weko-autox
+# weko-autox v2
 
 Go-based CLI tool for running Weko module tests in Docker.
 
@@ -235,6 +235,12 @@ This project has been migrated from `autox.sh` to the Go-based `autox` CLI.
 - Add local snapshot helper script (`scripts/build_snapshot.sh`, with optional `--release`).
 - Improve version output to use build-time injected version.
 - Keep shell-compatible cleanup behavior for `<module>.egg-info` and `.eggs` (always removed).
+
+### v1.2.1
+fix: create log directories only when needed to avoid failures during partial test runs.  
+change: suppress excessive per-file pytest logging when running modules separately.  
+docs: add installation steps.  
+change: adopt semantic version notation for the version display in preparation for the Go implementation.
 
 ### ver.1.2.0
 add options: `-p`; :clap: Tests can now be run on a per-function basis.  

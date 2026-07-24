@@ -1,15 +1,20 @@
 name: Release On Main Merge
 
 on:
-  push:
+  pull_request:
     branches:
       - main
+    types:
+      - closed
 
 permissions:
   contents: write
 
 jobs:
   release:
+    if: >
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'release/')
     runs-on: ubuntu-latest
 
     steps:
@@ -17,6 +22,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -29,12 +35,12 @@ jobs:
         run: |
           set -euo pipefail
 
-          merge_message="$(git log -1 --pretty=%B)"
-          if [[ "$merge_message" =~ release/((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?) ]]; then
+          head_ref="${{ github.event.pull_request.head.ref }}"
+          if [[ "$head_ref" =~ ^release/((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?)$ ]]; then
             version="${BASH_REMATCH[1]}"
           else
-            echo "This workflow expects a merge commit from release/<semver> into main."
-            echo "HEAD message: $merge_message"
+            echo "This workflow expects PR head branch name release/<semver>."
+            echo "PR head ref: $head_ref"
             exit 1
           fi
 
@@ -69,11 +75,27 @@ jobs:
       - name: Run tests
         run: go test ./...
 
+      - name: Prepare release notes from PR description
+        shell: bash
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+
+          notes_file="release-notes.md"
+          {
+            if [[ -n "${PR_BODY}" ]]; then
+              echo "${PR_BODY}"
+            else
+              echo "No PR description was provided."
+            fi
+          } > "$notes_file"
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: latest
-          args: release --clean
+          args: release --clean --release-notes release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
