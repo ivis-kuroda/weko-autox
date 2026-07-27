@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==============================================================================
-# autox.sh, ver.1.2.0
+# autox.sh, v1.2.1
 # update 2024.10.15
 # Tomohiro KURODA
 #
@@ -25,7 +25,7 @@ for module in $CURRENT_DR/modules/*; do
     fi
 done
 # List of modules to be tested separately for each file
-separately=("invenio-records" "weko-admin" "weko-authors" "weko-deposit" \
+separately=("weko-admin" "weko-authors" "weko-deposit" \
             "weko-items-ui" "weko-search-ui" "weko-records" "weko-records-ui" "weko-workflow")
 
 reserved=("all" "invenio" "weko" "-i" "-w" "-n" "-r" "-k" "-o" "-v" "-h")
@@ -73,7 +73,7 @@ function main(){
                 output=$OPTARG
                 ;;
             v)
-                echo "autox.sh - ver.1.2.0"
+                echo "autox.sh - v1.2.1"
                 return 0
                 ;;
             h)
@@ -222,8 +222,9 @@ function main(){
         # erase the coverage data
         docker-compose exec web sh -c "cd /code/modules/$module; .tox/c1/bin/coverage erase" > /dev/null 2>&1
         cd $CURRENT_DR/modules/$module
+        rm -rf ${module//-/\_}.egg-info .eggs
         if [ $r_flag = true ]; then
-            rm -rf $module.egg-info .tox htmlcov
+            rm -rf .tox htmlcov
             rm -f coverage.xml
         fi
         sleep 1

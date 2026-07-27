@@ -191,7 +191,7 @@ func assertFileExists(t *testing.T, path string) {
 	}
 }
 
-func TestCleanLocalArtifacts(t *testing.T) {
+func TestCleanModuleBuildArtifacts(t *testing.T) {
 	workspace := t.TempDir()
 	moduleName := "weko-admin"
 	modulePath := filepath.Join(workspace, moduleName)
@@ -200,6 +200,33 @@ func TestCleanLocalArtifacts(t *testing.T) {
 	}
 	paths := []string{
 		filepath.Join(modulePath, moduleName+".egg-info"),
+		filepath.Join(modulePath, ".eggs"),
+	}
+	for _, p := range paths {
+		if err := os.MkdirAll(p, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", p, err)
+		}
+	}
+
+	if err := cleanModuleBuildArtifacts(modulePath, moduleName); err != nil {
+		t.Fatalf("cleanModuleBuildArtifacts() error = %v", err)
+	}
+	for _, p := range paths {
+		if _, err := os.Stat(p); !os.IsNotExist(err) {
+			t.Fatalf("expected %s to be removed", p)
+		}
+	}
+}
+
+func TestCleanResetArtifacts(t *testing.T) {
+	workspace := t.TempDir()
+	moduleName := "weko-admin"
+	modulePath := filepath.Join(workspace, moduleName)
+	if err := os.MkdirAll(modulePath, 0o755); err != nil {
+		t.Fatalf("mkdir module path: %v", err)
+	}
+
+	paths := []string{
 		filepath.Join(modulePath, ".tox"),
 		filepath.Join(modulePath, "htmlcov"),
 		filepath.Join(modulePath, "coverage.xml"),
@@ -216,8 +243,8 @@ func TestCleanLocalArtifacts(t *testing.T) {
 		}
 	}
 
-	if err := cleanLocalArtifacts(modulePath, moduleName); err != nil {
-		t.Fatalf("cleanLocalArtifacts() error = %v", err)
+	if err := cleanResetArtifacts(modulePath); err != nil {
+		t.Fatalf("cleanResetArtifacts() error = %v", err)
 	}
 	for _, p := range paths {
 		if _, err := os.Stat(p); !os.IsNotExist(err) {
