@@ -11,6 +11,7 @@ type RunMode string
 const (
 	RunModeAllAtOnce RunMode = "all-at-once"
 	RunModePerFile   RunMode = "per-file"
+	RunModePerFunc   RunMode = "per-func"
 	RunModePartial   RunMode = "partial"
 )
 
@@ -30,25 +31,25 @@ type Config struct {
 
 func (c Config) Validate() error {
 	switch c.RunMode {
-	case RunModeAllAtOnce, RunModePerFile, RunModePartial:
+	case RunModeAllAtOnce, RunModePerFile, RunModePerFunc, RunModePartial:
 	default:
 		return fmt.Errorf("invalid run mode: %s", c.RunMode)
 	}
 
 	if c.Scope != "" {
 		switch c.Scope {
-		case "all", "weko", "invenio":
+		case ScopeAll, ScopeWeko, ScopeInvenio:
 		default:
 			return fmt.Errorf("invalid scope: %s", c.Scope)
 		}
 	}
 
-	if c.RunMode == RunModePartial {
+	if len(c.PartialSelectors) > 0 || c.RunMode == RunModePartial {
 		if strings.TrimSpace(c.PartialModule) == "" {
-			return errors.New("partial mode requires module by -p")
+			return errors.New(ErrPartialRequiresModule)
 		}
 		if len(c.PartialSelectors) == 0 {
-			return errors.New("partial mode requires at least one test selector")
+			return errors.New(ErrPartialRequiresOneSelector)
 		}
 	}
 

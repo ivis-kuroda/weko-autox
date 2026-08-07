@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
 	"github.com/ivis-kuroda/weko-autox/internal/app"
+	"github.com/ivis-kuroda/weko-autox/internal/runner"
 )
 
 func main() {
@@ -17,7 +19,9 @@ func main() {
 	}
 
 	if err := application.Execute(ctx, os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		if !errors.Is(err, runner.ErrTestsFailed) {
+			fmt.Fprintln(os.Stderr, err)
+		}
 		os.Exit(1)
 	}
 }

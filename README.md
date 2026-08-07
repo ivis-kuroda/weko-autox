@@ -45,7 +45,7 @@ Run version:
 autox -v
 ```
 
-Run all modules with default strategy (`all-at-once`):
+Run all modules explicitly with the default strategy (`all-at-once`):
 
 ```bash
 autox all
@@ -54,8 +54,20 @@ autox all
 ## CLI Usage
 
 ```bash
-autox [flags] [all|weko|invenio] [target1 target2 ...]
+autox [all|weko|invenio] [options]
+autox [module ...] [options]
+autox <module> -p <selector> [-p <selector> ...] [options]
+autox [options]
 ```
+
+`options` means arguments starting with `-` or `--`.
+
+Argument order rules:
+
+- If the first argument is a scope or module name, options can follow.
+- If the first argument is an option, run in options-only mode (no scope/module positional arguments).
+- Scope and module positional arguments are mutually exclusive, except when `-n/--exclude` is set.
+- If no scope, module, or standalone option (`-k`, `-v`, `-h`) is provided, the command is invalid and help is shown.
 
 ### Scope (first positional argument)
 
@@ -63,14 +75,15 @@ autox [flags] [all|weko|invenio] [target1 target2 ...]
 - `weko`: modules containing `weko` in the module name
 - `invenio`: modules containing `invenio` in the module name
 
-If scope is omitted, all modules are considered.
+If scope is omitted, it is not treated as `all`.
+Provide a module argument or a standalone option instead.
 
-### Flags
+### Options
 
 - `-n, --exclude`: treat positional module names as exclude list
 - `-r, --reset`: remove local artifacts (`*.egg-info`, `.tox`, `htmlcov`, `coverage.xml`) before running
 - `--run-mode <mode>`: test run strategy
-- `-p, --partial <module>`: partial mode shortcut (equivalent to `--run-mode partial` with target module)
+- `-p, --partial <selector>`: partial test selector (repeatable), requires one positional module argument
 - `-o, --output <name>`: output subdirectory under `log/`
 - `-k, --kill`: stop running tox/pytest processes in the target container
 - `-v, --version`: print version
@@ -82,9 +95,14 @@ If scope is omitted, all modules are considered.
   - Runs `tox` for each selected module
 - `per-file`
   - Prepares tox env once, then runs pytest for each `tests/test_*.py`
-- `partial`
-  - Runs only provided selectors for one module
-  - requires `-p <module>` and at least one selector (e.g. `test_api.py::test_xxx`)
+- `per-func`
+  - For `-p/--partial`, runs pytest once per selector
+
+With `-p/--partial`:
+
+- `--run-mode all-at-once`: runs one pytest command with all provided selectors
+- `--run-mode per-func`: runs one pytest command per selector
+- `--run-mode per-file` behaves like `per-func` for backward compatibility
 
 ## Examples
 
@@ -97,25 +115,37 @@ autox all
 Run weko modules except `weko-admin`:
 
 ```bash
-autox --run-mode all-at-once weko -n weko-admin
+autox weko weko-admin -n
 ```
 
 Run per-file strategy for invenio modules:
 
 ```bash
-autox --run-mode per-file invenio
+autox invenio --run-mode per-file
 ```
 
 Run partial tests for one module:
 
 ```bash
-autox -p weko-admin test_api.py::test_is_restricted_user test_tasks.py::test_send_all_reports
+autox weko-admin -p test_api.py::test_is_restricted_user -p test_tasks.py::test_send_all_reports
+```
+
+Run partial selectors all at once in a single pytest command:
+
+```bash
+autox weko-admin --run-mode all-at-once -p test_api.py::test_one -p test_api.py::test_two
+```
+
+Run partial selectors one by one:
+
+```bash
+autox weko-admin --run-mode per-func -p test_api.py::test_one -p test_api.py::test_two
 ```
 
 Write logs under `log/example/`:
 
 ```bash
-autox -o example all
+autox all -o example
 ```
 
 Stop running tox/pytest processes:
@@ -123,6 +153,8 @@ Stop running tox/pytest processes:
 ```bash
 autox -k
 ```
+
+Invalid combinations or missing targets print help and exit.
 
 ## Output
 
@@ -134,7 +166,8 @@ Typical files:
 - `test_all.log`
 - `install.log` (per-file mode)
 - `test_*.log` (per-file mode)
-- `partialN.log` (partial mode)
+- `partial.log` (`-p` with `--run-mode all-at-once`)
+- `partialN.log` (`-p` with `--run-mode per-func` or `--run-mode per-file`)
 - `coverage.log`
 
 ## Note

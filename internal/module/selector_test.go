@@ -37,7 +37,7 @@ func TestSelect_Exclude(t *testing.T) {
 }
 
 func TestSelect_PartialModule(t *testing.T) {
-	cfg := cli.Config{RunMode: cli.RunModePartial, PartialModule: "weko-admin", PartialSelectors: []string{"test_a.py::x"}}
+	cfg := cli.Config{RunMode: cli.RunModeAllAtOnce, PartialModule: "weko-admin", PartialSelectors: []string{"test_a.py::x"}}
 	got, err := Select(sampleModules(), cfg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

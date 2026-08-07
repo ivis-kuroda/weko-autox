@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,6 +20,8 @@ type Runner struct {
 	Exec      dockerx.Executor
 	Progress  report.Progress
 }
+
+var ErrTestsFailed = errors.New("some tests failed")
 
 func (r Runner) Run(ctx context.Context, cfg cli.Config) error {
 	if cfg.Kill {
@@ -39,6 +42,8 @@ func (r Runner) Run(ctx context.Context, cfg cli.Config) error {
 		return err
 	}
 
+	hadTestFailures := false
+
 	for i, m := range targets {
 		r.Progress.Setup(m.Name, i+1, len(targets))
 		if err := r.prepareModuleLogDir(m.Name, cfg.OutputDirName); err != nil {
@@ -54,30 +59,48 @@ func (r Runner) Run(ctx context.Context, cfg cli.Config) error {
 		}
 
 		_, _ = r.Exec.Exec(ctx, fmt.Sprintf("cd /code/modules/%s; .tox/c1/bin/coverage erase", m.Name))
-		r.Progress.ModuleStart(m.Name, i+1, len(targets))
+		stopSpinner := r.Progress.StartSpinner(fmt.Sprintf("%s progressing.", m.Name))
 
-		switch cfg.RunMode {
-		case cli.RunModeAllAtOnce:
-			if err := r.runAllAtOnce(ctx, m.Name, cfg.OutputDirName); err != nil {
+		if len(cfg.PartialSelectors) > 0 {
+			failed, err := r.runPartial(ctx, m.Name, cfg.OutputDirName, cfg.PartialSelectors, cfg.RunMode)
+			hadTestFailures = hadTestFailures || failed
+			if err != nil {
+				stopSpinner()
 				return err
 			}
-		case cli.RunModePerFile:
-			if err := r.runPerFile(ctx, m, cfg.OutputDirName); err != nil {
-				return err
+		} else {
+			switch cfg.RunMode {
+			case cli.RunModeAllAtOnce:
+				failed, err := r.runAllAtOnce(ctx, m.Name, cfg.OutputDirName)
+				hadTestFailures = hadTestFailures || failed
+				if err != nil {
+					stopSpinner()
+					return err
+				}
+			case cli.RunModePerFile:
+				failed, err := r.runPerFile(ctx, m, cfg.OutputDirName)
+				hadTestFailures = hadTestFailures || failed
+				if err != nil {
+					stopSpinner()
+					return err
+				}
+			default:
+				stopSpinner()
+				return fmt.Errorf("unsupported run mode: %s", cfg.RunMode)
 			}
-		case cli.RunModePartial:
-			if err := r.runPartial(ctx, m.Name, cfg.OutputDirName, cfg.PartialSelectors); err != nil {
-				return err
-			}
-		default:
-			return fmt.Errorf("unsupported run mode: %s", cfg.RunMode)
 		}
 
 		coverage, err := r.fetchCoverage(ctx, m.Name, cfg.OutputDirName)
+		stopSpinner()
 		if err != nil {
 			return err
 		}
 		r.Progress.ModuleDone(m.Name, coverage, i+1, len(targets))
+	}
+
+	if hadTestFailures {
+		r.Progress.DoneWithFailures()
+		return ErrTestsFailed
 	}
 
 	r.Progress.Done()
@@ -89,61 +112,106 @@ func (r Runner) installTox(ctx context.Context) error {
 	return err
 }
 
-func (r Runner) runAllAtOnce(ctx context.Context, moduleName string, outputName string) error {
-	res, err := r.Exec.Exec(ctx, fmt.Sprintf("cd /code/modules/%s; tox", moduleName))
+func (r Runner) runAllAtOnce(ctx context.Context, moduleName string, outputName string) (bool, error) {
+	res, err := r.execToModuleLog(ctx, moduleName, outputName, "test_all.log", fmt.Sprintf("cd /code/modules/%s; tox", moduleName))
 	if err != nil {
-		_ = r.writeModuleLog(outputName, moduleName, "test_all.log", res.Stdout+res.Stderr)
-		return err
+		if isNonZeroExit(err, res) {
+			return true, nil
+		}
+		return false, err
 	}
-	return r.writeModuleLog(outputName, moduleName, "test_all.log", res.Stdout+res.Stderr)
+	return false, nil
 }
 
-func (r Runner) runPerFile(ctx context.Context, m module.Module, outputName string) error {
-	install, err := r.Exec.Exec(ctx, fmt.Sprintf("cd /code/modules/%s; tox -e c1 --notest", m.Name))
+func (r Runner) runPerFile(ctx context.Context, m module.Module, outputName string) (bool, error) {
+	install, err := r.execToModuleLog(ctx, m.Name, outputName, "install.log", fmt.Sprintf("cd /code/modules/%s; tox -e c1 --notest", m.Name))
 	if err != nil {
-		_ = r.writeModuleLog(outputName, m.Name, "install.log", install.Stdout+install.Stderr)
-		return err
+		return false, err
 	}
-	if err := r.writeModuleLog(outputName, m.Name, "install.log", install.Stdout+install.Stderr); err != nil {
-		return err
-	}
+	_ = install
+
+	hadTestFailures := false
 
 	testFiles, err := filepath.Glob(filepath.Join(m.Path, "tests", "test_*.py"))
 	if err != nil {
-		return fmt.Errorf("glob test files: %w", err)
+		return false, fmt.Errorf("glob test files: %w", err)
 	}
 	for _, file := range testFiles {
 		base := filepath.Base(file)
-		res, execErr := r.Exec.Exec(ctx, fmt.Sprintf("cd /code/modules/%s; .tox/c1/bin/pytest --cov=%s tests/%s -v --cov-append --cov-branch --cov-report=term --cov-report=html --basetemp=/code/modules/%s/.tox/c1/tmp --full-trace", m.Name, strings.ReplaceAll(m.Name, "-", "_"), base, m.Name))
-		if err := r.writeModuleLog(outputName, m.Name, strings.TrimSuffix(base, ".py")+".log", res.Stdout+res.Stderr); err != nil {
-			return err
-		}
+		res, execErr := r.execToModuleLog(ctx, m.Name, outputName, strings.TrimSuffix(base, ".py")+".log", fmt.Sprintf("cd /code/modules/%s; .tox/c1/bin/pytest --cov=%s tests/%s -v --cov-append --cov-branch --cov-report=term --cov-report=html -W ignore --basetemp=/code/modules/%s/.tox/c1/tmp", m.Name, strings.ReplaceAll(m.Name, "-", "_"), base, m.Name))
 		if execErr != nil {
-			return execErr
+			if isNonZeroExit(execErr, res) {
+				hadTestFailures = true
+				continue
+			}
+			return false, execErr
 		}
 	}
-	return nil
+	return hadTestFailures, nil
 }
 
-func (r Runner) runPartial(ctx context.Context, moduleName string, outputName string, selectors []string) error {
-	for i, selector := range selectors {
-		res, err := r.Exec.Exec(ctx, fmt.Sprintf("cd /code/modules/%s; .tox/c1/bin/pytest --cov=%s tests/%s -v -vv -s --cov-append --cov-branch --cov-report=term --cov-report=html --basetemp=/code/modules/%s/.tox/c1/tmp --full-trace", moduleName, strings.ReplaceAll(moduleName, "-", "_"), selector, moduleName))
-		if writeErr := r.writeModuleLog(outputName, moduleName, fmt.Sprintf("partial%d.log", i+1), res.Stdout+res.Stderr); writeErr != nil {
-			return writeErr
+func (r Runner) runPartial(ctx context.Context, moduleName string, outputName string, selectors []string, runMode cli.RunMode) (bool, error) {
+	switch runMode {
+	case cli.RunModeAllAtOnce:
+		return r.runPartialAllAtOnce(ctx, moduleName, outputName, selectors)
+	case cli.RunModePerFunc, cli.RunModePerFile, cli.RunModePartial:
+		return r.runPartialPerSelector(ctx, moduleName, outputName, selectors)
+	default:
+		return false, fmt.Errorf("unsupported run mode for partial selectors: %s", runMode)
+	}
+}
+
+func (r Runner) runPartialAllAtOnce(ctx context.Context, moduleName string, outputName string, selectors []string) (bool, error) {
+	targets := make([]string, 0, len(selectors))
+	for _, selector := range selectors {
+		targets = append(targets, "tests/"+selector)
+	}
+
+	res, err := r.execToModuleLog(
+		ctx,
+		moduleName,
+		outputName,
+		"partial.log",
+		fmt.Sprintf(
+			"cd /code/modules/%s; .tox/c1/bin/pytest --cov=%s %s -v -vv -s --cov-append --cov-branch --cov-report=term --cov-report=html -W ignore --basetemp=/code/modules/%s/.tox/c1/tmp",
+			moduleName,
+			strings.ReplaceAll(moduleName, "-", "_"),
+			strings.Join(targets, " "),
+			moduleName,
+		),
+	)
+	if err != nil {
+		if isNonZeroExit(err, res) {
+			return true, nil
 		}
+		return false, err
+	}
+
+	return false, nil
+}
+
+func (r Runner) runPartialPerSelector(ctx context.Context, moduleName string, outputName string, selectors []string) (bool, error) {
+	hadTestFailures := false
+
+	for i, selector := range selectors {
+		res, err := r.execToModuleLog(ctx, moduleName, outputName, fmt.Sprintf("partial%d.log", i+1), fmt.Sprintf("cd /code/modules/%s; .tox/c1/bin/pytest --cov=%s tests/%s -v -vv -s --cov-append --cov-branch --cov-report=term --cov-report=html -W ignore --basetemp=/code/modules/%s/.tox/c1/tmp", moduleName, strings.ReplaceAll(moduleName, "-", "_"), selector, moduleName))
 		if err != nil {
-			return err
+			if isNonZeroExit(err, res) {
+				hadTestFailures = true
+				continue
+			}
+			return false, err
 		}
 	}
-	return nil
+	return hadTestFailures, nil
 }
 
 func (r Runner) fetchCoverage(ctx context.Context, moduleName string, outputName string) (string, error) {
-	res, err := r.Exec.Exec(ctx, fmt.Sprintf("cd /code/modules/%s; .tox/c1/bin/coverage report", moduleName))
-	if writeErr := r.writeModuleLog(outputName, moduleName, "coverage.log", res.Stdout+res.Stderr); writeErr != nil {
-		return "", writeErr
-	}
+	res, err := r.execToModuleLog(ctx, moduleName, outputName, "coverage.log", fmt.Sprintf("cd /code/modules/%s; .tox/c1/bin/coverage report", moduleName))
 	if err != nil {
+		if isNonZeroExit(err, res) {
+			return "0", nil
+		}
 		return "", err
 	}
 
@@ -153,6 +221,38 @@ func (r Runner) fetchCoverage(ctx context.Context, moduleName string, outputName
 		return "0", nil
 	}
 	return m[1], nil
+}
+
+func (r Runner) execToModuleLog(ctx context.Context, moduleName string, outputName string, fileName string, shellCommand string) (dockerx.ExecResult, error) {
+	path := filepath.Join(moduleLogDir(r.Workspace, outputName, moduleName), fileName)
+	logFile, err := os.Create(path)
+	if err != nil {
+		return dockerx.ExecResult{}, fmt.Errorf("create log file %s: %w", path, err)
+	}
+	defer logFile.Close()
+
+	return r.Exec.ExecStream(ctx, shellCommand, logFile, logFile)
+}
+
+func isNonZeroExit(err error, res dockerx.ExecResult) bool {
+	if err == nil {
+		return false
+	}
+	// Context cancellation is an interruption, not a test failure.
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+
+	var exitErr interface{ ExitCode() int }
+	if errors.As(err, &exitErr) {
+		return exitErr.ExitCode() != 0
+	}
+
+	if strings.Contains(err.Error(), "exec failed with code") {
+		return true
+	}
+
+	return res.ExitCode != 0
 }
 
 func (r Runner) prepareModuleLogDir(moduleName string, outputName string) error {

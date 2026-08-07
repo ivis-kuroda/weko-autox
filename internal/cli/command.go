@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 
@@ -11,20 +12,41 @@ import (
 var versionString = "dev"
 
 func ParseArgs(args []string) (Config, error) {
+	if err := validateArgOrder(args); err != nil {
+		return Config{}, err
+	}
+
 	var cfg Config
 	var excludeMode bool
+	var partialSelectors []string
 
 	cmd := &cobra.Command{
-		Use:   "autox [all|weko|invenio] [target1 target2 ...]",
-		Short: "Run tox for Weko modules",
+		Use:   CommandUse,
+		Short: CommandShort,
 		RunE: func(_ *cobra.Command, positional []string) error {
 			if cfg.Version || cfg.Kill {
 				return nil
 			}
 
-			if cfg.PartialModule != "" {
-				cfg.RunMode = RunModePartial
-				cfg.PartialSelectors = positional
+			if cfg.RunMode == RunModePartial || len(partialSelectors) > 0 {
+				if len(positional) == 0 {
+					return errors.New(ErrPartialRequiresModule)
+				}
+				if len(positional) > 1 {
+					return errors.New(ErrPartialSingleModuleOnly)
+				}
+				if len(partialSelectors) == 0 {
+					return errors.New(ErrPartialRequiresOneSelector)
+				}
+				if cfg.RunMode == "" {
+					cfg.RunMode = RunModeAllAtOnce
+				}
+				if cfg.RunMode == RunModePartial {
+					cfg.RunMode = RunModePerFunc
+				}
+
+				cfg.PartialModule = positional[0]
+				cfg.PartialSelectors = partialSelectors
 				return cfg.Validate()
 			}
 
@@ -34,10 +56,12 @@ func ParseArgs(args []string) (Config, error) {
 
 			rest := positional
 			if len(rest) > 0 {
-				switch rest[0] {
-				case "all", "weko", "invenio":
+				if IsScopeKeyword(rest[0]) {
 					cfg.Scope = rest[0]
 					rest = rest[1:]
+					if len(rest) > 0 && !excludeMode {
+						return errors.New(ErrScopeAndModuleExclusive)
+					}
 				}
 			}
 
@@ -47,23 +71,27 @@ func ParseArgs(args []string) (Config, error) {
 				cfg.IncludeModules = rest
 			}
 
+			if cfg.Scope == "" && len(cfg.IncludeModules) == 0 && len(cfg.ExcludeModules) == 0 {
+				return errors.New(ErrMissingTargetOrStandalone)
+			}
+
 			return cfg.Validate()
 		},
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
 
-	cmd.Flags().BoolVarP(&excludeMode, "exclude", "n", false, "exclude mode for positional module names")
-	cmd.Flags().BoolVarP(&cfg.Clean, "reset", "r", false, "remove egg-info, .tox, htmlcov and coverage.xml before run")
-	cmd.Flags().StringVarP((*string)(&cfg.RunMode), "run-mode", "", string(RunModeAllAtOnce), "run strategy: all-at-once | per-file | partial")
-	cmd.Flags().StringVarP(&cfg.PartialModule, "partial", "p", "", "target module for partial mode")
-	cmd.Flags().StringVarP(&cfg.OutputDirName, "output", "o", "", "output subdirectory under log")
-	cmd.Flags().BoolVarP(&cfg.Kill, "kill", "k", false, "stop running tox/pytest processes")
-	cmd.Flags().BoolVarP(&cfg.Version, "version", "v", false, "show version")
+	bindOption(cmd.Flags().BoolVarP, &excludeMode, OptionExclude)
+	bindOption(cmd.Flags().BoolVarP, &cfg.Clean, OptionReset)
+	bindOption(cmd.Flags().StringVarP, (*string)(&cfg.RunMode), OptionRunMode)
+	bindOption(cmd.Flags().StringArrayVarP, &partialSelectors, OptionPartial)
+	bindOption(cmd.Flags().StringVarP, &cfg.OutputDirName, OptionOutput)
+	bindOption(cmd.Flags().BoolVarP, &cfg.Kill, OptionKill)
+	bindOption(cmd.Flags().BoolVarP, &cfg.Version, OptionVersion)
 
 	cmd.SetHelpFunc(func(c *cobra.Command, _ []string) {
 		cfg.Help = true
-		_ = c.Usage()
+		printStructuredHelp(c.OutOrStdout())
 	})
 
 	cmd.SetArgs(args)
@@ -77,6 +105,7 @@ func ParseArgs(args []string) (Config, error) {
 func Execute(ctx context.Context, out io.Writer, args []string, run func(context.Context, Config) error) error {
 	cfg, err := ParseArgs(args)
 	if err != nil {
+		printStructuredHelp(out)
 		return err
 	}
 
@@ -88,4 +117,8 @@ func Execute(ctx context.Context, out io.Writer, args []string, run func(context
 	}
 
 	return run(ctx, cfg)
+}
+
+func bindOption[T any](bind func(*T, string, string, T, string), target *T, spec OptionSpec[T]) {
+	bind(target, spec.Name, spec.Short, spec.Default, spec.Description)
 }

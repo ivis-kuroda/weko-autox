@@ -9,7 +9,7 @@ import (
 )
 
 func Select(modules []Module, cfg cli.Config) ([]Module, error) {
-	if cfg.RunMode == cli.RunModePartial {
+	if len(cfg.PartialSelectors) > 0 || cfg.RunMode == cli.RunModePartial {
 		for _, m := range modules {
 			if m.Name == cfg.PartialModule {
 				return []Module{m}, nil

@@ -1,7 +1,9 @@
 package runner
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -33,6 +35,17 @@ func (f *fakeExecutor) Exec(_ context.Context, shellCommand string) (dockerx.Exe
 		return dockerx.ExecResult{}, err
 	}
 	return dockerx.ExecResult{}, nil
+}
+
+func (f *fakeExecutor) ExecStream(ctx context.Context, shellCommand string, stdoutWriter io.Writer, stderrWriter io.Writer) (dockerx.ExecResult, error) {
+	res, err := f.Exec(ctx, shellCommand)
+	if stdoutWriter != nil && res.Stdout != "" {
+		_, _ = io.WriteString(stdoutWriter, res.Stdout)
+	}
+	if stderrWriter != nil && res.Stderr != "" {
+		_, _ = io.WriteString(stderrWriter, res.Stderr)
+	}
+	return res, err
 }
 
 func (f *fakeExecutor) StopTests(_ context.Context) error {
@@ -105,11 +118,37 @@ func TestRunnerRunPartial(t *testing.T) {
 	exec := &fakeExecutor{outputs: map[string]dockerx.ExecResult{}, errors: map[string]error{}}
 	r := Runner{Workspace: workspace, Exec: exec, Progress: report.NewProgress(io.Discard)}
 
+	pytestCmd := "cd /code/modules/weko-admin; .tox/c1/bin/pytest --cov=weko_admin tests/test_api.py::test_one tests/test_api.py::test_two -v -vv -s --cov-append --cov-branch --cov-report=term --cov-report=html -W ignore --basetemp=/code/modules/weko-admin/.tox/c1/tmp --full-trace"
+	coverageCmd := "cd /code/modules/weko-admin; .tox/c1/bin/coverage report"
+	exec.outputs[pytestCmd] = dockerx.ExecResult{Stdout: "ok"}
+	exec.outputs[coverageCmd] = dockerx.ExecResult{Stdout: "TOTAL 5 1 80%"}
+
+	cfg := cli.Config{
+		RunMode:          cli.RunModeAllAtOnce,
+		PartialModule:    "weko-admin",
+		PartialSelectors: []string{"test_api.py::test_one", "test_api.py::test_two"},
+	}
+
+	if err := r.Run(context.Background(), cfg); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	if !containsCommand(exec.commands, pytestCmd) {
+		t.Fatalf("missing combined partial selector command: %#v", exec.commands)
+	}
+	assertFileExists(t, filepath.Join(workspace, "log", "weko-admin", "partial.log"))
+}
+
+func TestRunnerRunPartial_PerFunc(t *testing.T) {
+	workspace := makeWorkspaceWithModule(t, "weko-admin", nil)
+	exec := &fakeExecutor{outputs: map[string]dockerx.ExecResult{}, errors: map[string]error{}}
+	r := Runner{Workspace: workspace, Exec: exec, Progress: report.NewProgress(io.Discard)}
+
 	coverageCmd := "cd /code/modules/weko-admin; .tox/c1/bin/coverage report"
 	exec.outputs[coverageCmd] = dockerx.ExecResult{Stdout: "TOTAL 5 1 80%"}
 
 	cfg := cli.Config{
-		RunMode:          cli.RunModePartial,
+		RunMode:          cli.RunModePerFunc,
 		PartialModule:    "weko-admin",
 		PartialSelectors: []string{"test_api.py::test_one", "test_api.py::test_two"},
 	}
@@ -280,5 +319,120 @@ func TestRunnerInstallToxError(t *testing.T) {
 	err := r.Run(context.Background(), cli.Config{RunMode: cli.RunModeAllAtOnce, Scope: "all"})
 	if err == nil {
 		t.Fatal("Run() expected install error")
+	}
+}
+
+func TestRunnerRunPartial_NonZeroExitStillCompletes(t *testing.T) {
+	workspace := makeWorkspaceWithModule(t, "weko-admin", nil)
+	pytestCmd := "cd /code/modules/weko-admin; .tox/c1/bin/pytest --cov=weko_admin tests/test_api.py::test_one -v -vv -s --cov-append --cov-branch --cov-report=term --cov-report=html -W ignore --basetemp=/code/modules/weko-admin/.tox/c1/tmp --full-trace"
+	coverageCmd := "cd /code/modules/weko-admin; .tox/c1/bin/coverage report"
+
+	exec := &fakeExecutor{
+		outputs: map[string]dockerx.ExecResult{
+			pytestCmd:   {Stdout: "failed test", ExitCode: 1},
+			coverageCmd: {Stdout: "TOTAL 10 2 80%"},
+		},
+		errors: map[string]error{
+			pytestCmd: fmt.Errorf("exec failed with code 1"),
+		},
+	}
+
+	var out bytes.Buffer
+	r := Runner{Workspace: workspace, Exec: exec, Progress: report.NewProgress(&out)}
+	cfg := cli.Config{
+		RunMode:          cli.RunModePartial,
+		PartialModule:    "weko-admin",
+		PartialSelectors: []string{"test_api.py::test_one"},
+	}
+
+	err := r.Run(context.Background(), cfg)
+	if !errors.Is(err, ErrTestsFailed) {
+		t.Fatalf("Run() should return ErrTestsFailed on non-zero pytest exit: %v", err)
+	}
+
+	assertFileExists(t, filepath.Join(workspace, "log", "weko-admin", "partial1.log"))
+	assertFileExists(t, filepath.Join(workspace, "log", "weko-admin", "coverage.log"))
+	if !strings.Contains(out.String(), "weko-admin finished. cov: \x1b[32m80%\x1b[0m") {
+		t.Fatalf("expected module completion output, got: %q", out.String())
+	}
+	if strings.Contains(out.String(), "All tests have been completed.") {
+		t.Fatalf("should not print success completion output, got: %q", out.String())
+	}
+	if !strings.Contains(out.String(), "Some tests have failed.") {
+		t.Fatalf("expected failure completion output, got: %q", out.String())
+	}
+}
+
+func TestIsNonZeroExitByErrorMessageWhenExitCodeMissing(t *testing.T) {
+	err := fmt.Errorf("exec failed with code 1")
+	if !isNonZeroExit(err, dockerx.ExecResult{ExitCode: 0}) {
+		t.Fatal("isNonZeroExit should detect non-zero exit by error message")
+	}
+}
+
+func TestRunnerRunAllAtOnce_NonZeroTestExitContinues(t *testing.T) {
+	workspace := makeWorkspaceWithModule(t, "weko-admin", nil)
+	testCmd := "cd /code/modules/weko-admin; tox"
+	coverageCmd := "cd /code/modules/weko-admin; .tox/c1/bin/coverage report"
+
+	exec := &fakeExecutor{
+		outputs: map[string]dockerx.ExecResult{
+			testCmd:     {Stdout: "FAILED tests", ExitCode: 1},
+			coverageCmd: {Stdout: "TOTAL 10 3 70%"},
+		},
+		errors: map[string]error{
+			testCmd: fmt.Errorf("exec failed with code 1"),
+		},
+	}
+
+	var out bytes.Buffer
+	r := Runner{Workspace: workspace, Exec: exec, Progress: report.NewProgress(&out)}
+	cfg := cli.Config{RunMode: cli.RunModeAllAtOnce, Scope: "all"}
+
+	err := r.Run(context.Background(), cfg)
+	if !errors.Is(err, ErrTestsFailed) {
+		t.Fatalf("Run() should return ErrTestsFailed after test non-zero exit: %v", err)
+	}
+
+	assertFileExists(t, filepath.Join(workspace, "log", "weko-admin", "test_all.log"))
+	assertFileExists(t, filepath.Join(workspace, "log", "weko-admin", "coverage.log"))
+	if !containsCommand(exec.commands, coverageCmd) {
+		t.Fatalf("expected coverage command to run after test failure: %#v", exec.commands)
+	}
+	if !strings.Contains(out.String(), "Some tests have failed.") {
+		t.Fatalf("expected failure completion output, got: %q", out.String())
+	}
+}
+
+func TestRunnerRunPerFile_NonZeroPytestContinuesAndLogsAll(t *testing.T) {
+	workspace := makeWorkspaceWithModule(t, "weko-items-ui", []string{"test_a.py", "test_b.py"})
+	exec := &fakeExecutor{outputs: map[string]dockerx.ExecResult{}, errors: map[string]error{}}
+
+	pytestA := "cd /code/modules/weko-items-ui; .tox/c1/bin/pytest --cov=weko_items_ui tests/test_a.py -v --cov-append --cov-branch --cov-report=term --cov-report=html -W ignore --basetemp=/code/modules/weko-items-ui/.tox/c1/tmp --full-trace"
+	pytestB := "cd /code/modules/weko-items-ui; .tox/c1/bin/pytest --cov=weko_items_ui tests/test_b.py -v --cov-append --cov-branch --cov-report=term --cov-report=html -W ignore --basetemp=/code/modules/weko-items-ui/.tox/c1/tmp --full-trace"
+	coverageCmd := "cd /code/modules/weko-items-ui; .tox/c1/bin/coverage report"
+
+	exec.outputs[pytestA] = dockerx.ExecResult{Stdout: "FAIL a", ExitCode: 1}
+	exec.errors[pytestA] = fmt.Errorf("exec failed with code 1")
+	exec.outputs[pytestB] = dockerx.ExecResult{Stdout: "PASS b"}
+	exec.outputs[coverageCmd] = dockerx.ExecResult{Stdout: "TOTAL 20 5 75%"}
+
+	var out bytes.Buffer
+	r := Runner{Workspace: workspace, Exec: exec, Progress: report.NewProgress(&out)}
+	cfg := cli.Config{RunMode: cli.RunModePerFile, Scope: "all"}
+
+	err := r.Run(context.Background(), cfg)
+	if !errors.Is(err, ErrTestsFailed) {
+		t.Fatalf("Run() should return ErrTestsFailed after pytest non-zero exit: %v", err)
+	}
+
+	assertFileExists(t, filepath.Join(workspace, "log", "weko-items-ui", "test_a.log"))
+	assertFileExists(t, filepath.Join(workspace, "log", "weko-items-ui", "test_b.log"))
+	assertFileExists(t, filepath.Join(workspace, "log", "weko-items-ui", "coverage.log"))
+	if !containsCommand(exec.commands, pytestB) {
+		t.Fatalf("expected second test command to run: %#v", exec.commands)
+	}
+	if !strings.Contains(out.String(), "Some tests have failed.") {
+		t.Fatalf("expected failure completion output, got: %q", out.String())
 	}
 }
