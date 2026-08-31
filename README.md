@@ -261,6 +261,17 @@ This project has been migrated from `autox.sh` to the Go-based `autox` CLI.
 
 
 ## Change Log
+### v2.0.0-alpha.3
+- feat: Restructure argument parsing to be positional-first, with stricter argument-order validation.
+- feat: Make `-p/--partial` a repeatable selector flag on one target module.
+- feat: Add `--run-mode per-func`; legacy `partial` mode is normalized to it.
+- feat: Stream `tox`/`pytest` output to log files as it's produced.
+- feat: Keep running remaining modules after a module's tests fail; report failures at the end.
+- feat: Add a progress spinner and colorized coverage output.
+- refactor: Rewrite `-h/--help` output.
+- ci: add Makefile, replacing the old snapshot script.
+- docs: add agent context docs
+
 ### v2.0.0-alpha.1 / v2.0.0-alpha.2
 - Note: There is no functional difference between `v2.0.0-alpha.1` and `v2.0.0-alpha.2`. `v2.0.0-alpha.2` exists because the `v2.0.0-alpha.1` release failed during release automation.
 - Migrate runtime from shell script to Go CLI (`autox`).

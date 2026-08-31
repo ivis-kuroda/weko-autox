@@ -23,6 +23,8 @@ type Runner struct {
 
 var ErrTestsFailed = errors.New("some tests failed")
 
+const pytestCommonArgs = "--cov-append --cov-branch --cov-report=term --cov-report=html -W ignore"
+
 func (r Runner) Run(ctx context.Context, cfg cli.Config) error {
 	if cfg.Kill {
 		return r.Exec.StopTests(ctx)
@@ -138,7 +140,7 @@ func (r Runner) runPerFile(ctx context.Context, m module.Module, outputName stri
 	}
 	for _, file := range testFiles {
 		base := filepath.Base(file)
-		res, execErr := r.execToModuleLog(ctx, m.Name, outputName, strings.TrimSuffix(base, ".py")+".log", fmt.Sprintf("cd /code/modules/%s; .tox/c1/bin/pytest --cov=%s tests/%s -v --cov-append --cov-branch --cov-report=term --cov-report=html -W ignore --basetemp=/code/modules/%s/.tox/c1/tmp", m.Name, strings.ReplaceAll(m.Name, "-", "_"), base, m.Name))
+		res, execErr := r.execToModuleLog(ctx, m.Name, outputName, strings.TrimSuffix(base, ".py")+".log", pytestCommand(m.Name, "tests/"+base, "-v"))
 		if execErr != nil {
 			if isNonZeroExit(execErr, res) {
 				hadTestFailures = true
@@ -172,13 +174,7 @@ func (r Runner) runPartialAllAtOnce(ctx context.Context, moduleName string, outp
 		moduleName,
 		outputName,
 		"partial.log",
-		fmt.Sprintf(
-			"cd /code/modules/%s; .tox/c1/bin/pytest --cov=%s %s -v -vv -s --cov-append --cov-branch --cov-report=term --cov-report=html -W ignore --basetemp=/code/modules/%s/.tox/c1/tmp",
-			moduleName,
-			strings.ReplaceAll(moduleName, "-", "_"),
-			strings.Join(targets, " "),
-			moduleName,
-		),
+		pytestCommand(moduleName, strings.Join(targets, " "), "-v -vv -s"),
 	)
 	if err != nil {
 		if isNonZeroExit(err, res) {
@@ -194,7 +190,7 @@ func (r Runner) runPartialPerSelector(ctx context.Context, moduleName string, ou
 	hadTestFailures := false
 
 	for i, selector := range selectors {
-		res, err := r.execToModuleLog(ctx, moduleName, outputName, fmt.Sprintf("partial%d.log", i+1), fmt.Sprintf("cd /code/modules/%s; .tox/c1/bin/pytest --cov=%s tests/%s -v -vv -s --cov-append --cov-branch --cov-report=term --cov-report=html -W ignore --basetemp=/code/modules/%s/.tox/c1/tmp", moduleName, strings.ReplaceAll(moduleName, "-", "_"), selector, moduleName))
+		res, err := r.execToModuleLog(ctx, moduleName, outputName, fmt.Sprintf("partial%d.log", i+1), pytestCommand(moduleName, "tests/"+selector, "-v -vv -s"))
 		if err != nil {
 			if isNonZeroExit(err, res) {
 				hadTestFailures = true
@@ -204,6 +200,18 @@ func (r Runner) runPartialPerSelector(ctx context.Context, moduleName string, ou
 		}
 	}
 	return hadTestFailures, nil
+}
+
+func pytestCommand(moduleName string, targets string, options string) string {
+	return fmt.Sprintf(
+		"cd /code/modules/%s; .tox/c1/bin/pytest --cov=%s %s %s %s --basetemp=/code/modules/%s/.tox/c1/tmp --full-trace",
+		moduleName,
+		strings.ReplaceAll(moduleName, "-", "_"),
+		targets,
+		options,
+		pytestCommonArgs,
+		moduleName,
+	)
 }
 
 func (r Runner) fetchCoverage(ctx context.Context, moduleName string, outputName string) (string, error) {
