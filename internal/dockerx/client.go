@@ -23,6 +23,7 @@ type ExecResult struct {
 
 type Executor interface {
 	Exec(ctx context.Context, shellCommand string) (ExecResult, error)
+	ExecStream(ctx context.Context, shellCommand string, stdoutWriter io.Writer, stderrWriter io.Writer) (ExecResult, error)
 	StopTests(ctx context.Context) error
 }
 
@@ -69,6 +70,10 @@ func (c *Client) Close() error {
 }
 
 func (c *Client) Exec(ctx context.Context, shellCommand string) (ExecResult, error) {
+	return c.ExecStream(ctx, shellCommand, nil, nil)
+}
+
+func (c *Client) ExecStream(ctx context.Context, shellCommand string, stdoutWriter io.Writer, stderrWriter io.Writer) (ExecResult, error) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
@@ -88,8 +93,35 @@ func (c *Client) Exec(ctx context.Context, shellCommand string) (ExecResult, err
 	}
 	defer attachResp.Close()
 
-	if _, err := stdcopy.StdCopy(&stdout, &stderr, attachResp.Reader); err != nil && err != io.EOF {
+	// Close the connection when ctx is cancelled so StdCopy unblocks immediately.
+	stopWatch := make(chan struct{})
+	defer close(stopWatch)
+	go func() {
+		select {
+		case <-ctx.Done():
+			attachResp.Close()
+		case <-stopWatch:
+		}
+	}()
+
+	stdoutDest := io.Writer(&stdout)
+	if stdoutWriter != nil {
+		stdoutDest = io.MultiWriter(&stdout, stdoutWriter)
+	}
+	stderrDest := io.Writer(&stderr)
+	if stderrWriter != nil {
+		stderrDest = io.MultiWriter(&stderr, stderrWriter)
+	}
+
+	if _, err := stdcopy.StdCopy(stdoutDest, stderrDest, attachResp.Reader); err != nil && err != io.EOF {
+		if ctx.Err() != nil {
+			return ExecResult{ExitCode: -1}, ctx.Err()
+		}
 		return ExecResult{}, fmt.Errorf("read exec output: %w", err)
+	}
+
+	if ctx.Err() != nil {
+		return ExecResult{ExitCode: -1}, ctx.Err()
 	}
 
 	inspect, err := c.docker.ContainerExecInspect(ctx, execResp.ID)
