@@ -238,7 +238,9 @@ func TestCleanModuleBuildArtifacts(t *testing.T) {
 		t.Fatalf("mkdir module path: %v", err)
 	}
 	paths := []string{
-		filepath.Join(modulePath, moduleName+".egg-info"),
+		// setuptools normalizes the hyphenated module name to underscores
+		// when naming the generated .egg-info directory.
+		filepath.Join(modulePath, "weko_admin.egg-info"),
 		filepath.Join(modulePath, ".eggs"),
 	}
 	for _, p := range paths {

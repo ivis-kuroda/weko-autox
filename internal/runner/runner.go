@@ -283,8 +283,9 @@ func moduleLogDir(workspace string, outputName string, moduleName string) string
 }
 
 func cleanModuleBuildArtifacts(modulePath string, moduleName string) error {
+	eggInfoName := strings.ReplaceAll(moduleName, "-", "_") + ".egg-info"
 	paths := []string{
-		filepath.Join(modulePath, moduleName+".egg-info"),
+		filepath.Join(modulePath, eggInfoName),
 		filepath.Join(modulePath, ".eggs"),
 	}
 	for _, p := range paths {
