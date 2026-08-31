@@ -231,13 +231,17 @@ func (r Runner) fetchCoverage(ctx context.Context, moduleName string, outputName
 	return m[1], nil
 }
 
-func (r Runner) execToModuleLog(ctx context.Context, moduleName string, outputName string, fileName string, shellCommand string) (dockerx.ExecResult, error) {
+func (r Runner) execToModuleLog(ctx context.Context, moduleName string, outputName string, fileName string, shellCommand string) (res dockerx.ExecResult, err error) {
 	path := filepath.Join(moduleLogDir(r.Workspace, outputName, moduleName), fileName)
 	logFile, err := os.Create(path)
 	if err != nil {
 		return dockerx.ExecResult{}, fmt.Errorf("create log file %s: %w", path, err)
 	}
-	defer logFile.Close()
+	defer func() {
+		if closeErr := logFile.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close log file %s: %w", path, closeErr))
+		}
+	}()
 
 	return r.Exec.ExecStream(ctx, shellCommand, logFile, logFile)
 }
@@ -271,14 +275,6 @@ func (r Runner) prepareModuleLogDir(moduleName string, outputName string) error 
 	return nil
 }
 
-func (r Runner) writeModuleLog(outputName string, moduleName string, fileName string, body string) error {
-	path := filepath.Join(moduleLogDir(r.Workspace, outputName, moduleName), fileName)
-	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
-		return fmt.Errorf("write log file %s: %w", path, err)
-	}
-	return nil
-}
-
 func moduleLogDir(workspace string, outputName string, moduleName string) string {
 	if outputName == "" {
 		return filepath.Join(workspace, "log", moduleName)
@@ -287,8 +283,9 @@ func moduleLogDir(workspace string, outputName string, moduleName string) string
 }
 
 func cleanModuleBuildArtifacts(modulePath string, moduleName string) error {
+	eggInfoName := strings.ReplaceAll(moduleName, "-", "_") + ".egg-info"
 	paths := []string{
-		filepath.Join(modulePath, moduleName+".egg-info"),
+		filepath.Join(modulePath, eggInfoName),
 		filepath.Join(modulePath, ".eggs"),
 	}
 	for _, p := range paths {

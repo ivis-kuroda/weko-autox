@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	composetypes "github.com/compose-spec/compose-go/types"
-	"github.com/docker/docker/api/types"
 	containertypes "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
@@ -174,7 +173,7 @@ func findServiceContainer(ctx context.Context, dockerCli *client.Client, project
 	return containerID, nil
 }
 
-func chooseContainerID(containers []types.Container) (string, error) {
+func chooseContainerID(containers []containertypes.Summary) (string, error) {
 	if len(containers) == 0 {
 		return "", fmt.Errorf("empty container list")
 	}

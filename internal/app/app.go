@@ -36,7 +36,7 @@ func (a *App) Execute(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
-		defer execClient.Close()
+		defer func() { _ = execClient.Close() }()
 
 		r := runner.Runner{
 			Workspace: workspace,

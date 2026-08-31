@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	composetypes "github.com/compose-spec/compose-go/types"
-	"github.com/docker/docker/api/types"
+	containertypes "github.com/docker/docker/api/types/container"
 )
 
 func TestNew_MissingComposeFile(t *testing.T) {
@@ -33,7 +33,7 @@ func TestHasService(t *testing.T) {
 
 func TestChooseContainerID(t *testing.T) {
 	t.Run("prefer running container", func(t *testing.T) {
-		containers := []types.Container{
+		containers := []containertypes.Summary{
 			{ID: "stopped-id", State: "exited"},
 			{ID: "running-id", State: "running"},
 		}
@@ -48,7 +48,7 @@ func TestChooseContainerID(t *testing.T) {
 	})
 
 	t.Run("fallback to first container", func(t *testing.T) {
-		containers := []types.Container{
+		containers := []containertypes.Summary{
 			{ID: "first-id", State: "created"},
 			{ID: "second-id", State: "paused"},
 		}
