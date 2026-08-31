@@ -1,4 +1,4 @@
-.PHONY: help build dev test clean run release build-snapshot
+.PHONY: help build dev test lint clean run release build-snapshot
 .DEFAULT_GOAL := help
 
 # Variables
@@ -34,6 +34,13 @@ build: ## Build development binary for current platform
 
 test: ## Run unit tests
 	go test ./...
+
+lint: ## Run golangci-lint
+	@if ! command -v golangci-lint >/dev/null 2>&1; then \
+		echo "Error: golangci-lint not found. Install with: https://golangci-lint.run/welcome/install/"; \
+		exit 127; \
+	fi
+	golangci-lint run ./...
 
 build-snapshot: ## Build snapshot binaries for all platforms using goreleaser
 	@echo "Building snapshot binaries..."
