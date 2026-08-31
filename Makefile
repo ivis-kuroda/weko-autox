@@ -1,4 +1,4 @@
-.PHONY: help build dev clean run release build-snapshot
+.PHONY: help build dev test clean run release build-snapshot
 .DEFAULT_GOAL := help
 
 # Variables
@@ -31,6 +31,9 @@ build: ## Build development binary for current platform
 		-o $(BINARY_PATH) \
 		$(MAIN_PKG)
 	@echo "✓ Binary built: $(BINARY_PATH)"
+
+test: ## Run unit tests
+	go test ./...
 
 build-snapshot: ## Build snapshot binaries for all platforms using goreleaser
 	@echo "Building snapshot binaries..."
