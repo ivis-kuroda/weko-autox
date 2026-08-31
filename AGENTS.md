@@ -55,6 +55,8 @@ fix: prevent duplicate log directories
 ```
 
 - Bullet points do not start with a capital letter and do not end with a period.
+- Keep each bullet to roughly one line (about 12-15 words); avoid stacking multiple
+  subordinate clauses ("because... so...") that wrap across three or more lines.
 
 - If Claude authored or materially contributed to the change, add a trailer (blank line,
   then the trailer) so the commit carries a co-author. Replace `Claude` with the specific
