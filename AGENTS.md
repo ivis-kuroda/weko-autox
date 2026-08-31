@@ -48,11 +48,13 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/) for the subj
 ```
 fix: prevent duplicate log directories
 
-- Reuse the existing log directory instead of creating a new one, because
+- reuse the existing log directory instead of creating a new one, because
   reruns were losing previous output
-- Guard directory creation with an existence check, to avoid a race when
+- guard directory creation with an existence check, to avoid a race when
   multiple runs start concurrently
 ```
+
+- Bullet points do not start with a capital letter and do not end with a period.
 
 - If Claude authored or materially contributed to the change, add a trailer (blank line,
   then the trailer) so the commit carries a co-author. Replace `Claude` with the specific
