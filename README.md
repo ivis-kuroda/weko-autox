@@ -266,7 +266,7 @@ This project has been migrated from `autox.sh` to the Go-based `autox` CLI.
 - Migrate runtime from shell script to Go CLI (`autox`).
 - Add binary-first usage and release distribution flow.
 - Add GitHub Actions + GoReleaser automation for release artifacts.
-- Add local snapshot helper script (`scripts/build_snapshot.sh`, with optional `--release`).
+- Add `make build-snapshot` for local snapshot builds via GoReleaser.
 - Improve version output to use build-time injected version.
 - Keep shell-compatible cleanup behavior for `<module>.egg-info` and `.eggs` (always removed).
 
