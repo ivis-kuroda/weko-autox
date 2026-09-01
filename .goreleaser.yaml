@@ -39,6 +39,10 @@ release:
   draft: false
   prerelease: auto
   name_template: "{{ .ProjectName }} v{{ .Version }}"
+  # reuse the draft release created (with the PR description as its notes)
+  # by tag-on-merge.yml before this tag was pushed, instead of creating a
+  # second, separate release
+  use_existing_draft: true
 
 changelog:
   use: git

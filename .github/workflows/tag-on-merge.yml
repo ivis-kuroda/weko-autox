@@ -1,4 +1,4 @@
-name: Release On Main Merge
+name: Tag Release On Main Merge
 
 on:
   pull_request:
@@ -11,11 +11,11 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-on-main
+  group: tag-on-merge
   cancel-in-progress: false
 
 jobs:
-  release:
+  tag:
     if: >
       github.event.pull_request.merged == true &&
       startsWith(github.event.pull_request.head.ref, 'release/')
@@ -27,11 +27,6 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.merge_commit_sha }}
-
-      - name: Setup Go
-        uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
 
       - name: Derive version from merged release branch
         id: version
@@ -62,9 +57,44 @@ jobs:
           git fetch --tags
           tag="${{ steps.version.outputs.tag }}"
           if git rev-parse "$tag" >/dev/null 2>&1; then
-            echo "Tag $tag already exists. Skipping release to avoid duplication."
+            echo "Tag $tag already exists. Skipping to avoid duplication."
             exit 1
           fi
+
+      - name: Write release notes from PR description
+        id: notes
+        shell: bash
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+
+          notes_file="$(mktemp /tmp/release-notes.XXXXXX.md)"
+          if [[ -n "${PR_BODY}" ]]; then
+            printf '%s\n' "${PR_BODY}" > "$notes_file"
+          else
+            printf 'No PR description was provided.\n' > "$notes_file"
+          fi
+
+          echo "file=$notes_file" >> "$GITHUB_OUTPUT"
+
+      - name: Create draft GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag="${{ steps.version.outputs.tag }}"
+          # created before the tag is pushed, so that the tag-triggered release
+          # workflow always finds this draft already in place (see below) -
+          # a draft release does not require the tag to exist yet
+          gh release create "$tag" \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.event.pull_request.merge_commit_sha }}" \
+            --title "$tag" \
+            --notes-file "${{ steps.notes.outputs.file }}" \
+            --draft
 
       - name: Create and push release tag
         shell: bash
@@ -75,36 +105,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+          # pushed last: this is what triggers release.yml, and by this point
+          # the draft release above is already guaranteed to exist, so there
+          # is no race between the two workflows
           git tag -a "$tag" -m "Release $tag"
           git push origin "$tag"
-
-      - name: Run tests
-        run: go test ./...
-
-      - name: Prepare release notes from PR description
-        id: notes
-        shell: bash
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
-        run: |
-          set -euo pipefail
-
-          notes_file="$(mktemp /tmp/release-notes.XXXXXX.md)"
-          {
-            if [[ -n "${PR_BODY}" ]]; then
-              echo "${PR_BODY}"
-            else
-              echo "No PR description was provided."
-            fi
-          } > "$notes_file"
-
-          echo "file=$notes_file" >> "$GITHUB_OUTPUT"
-
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          distribution: goreleaser
-          version: latest
-          args: release --clean --release-notes "${{ steps.notes.outputs.file }}"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
