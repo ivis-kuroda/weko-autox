@@ -261,6 +261,10 @@ This project has been migrated from `autox.sh` to the Go-based `autox` CLI.
 
 
 ## Change Log
+### v2.0.0-beta.2
+- fix: Parse the `TOTAL` coverage line regardless of branch coverage columns; the previous regex assumed a fixed column count and failed to extract the percentage when branch coverage was enabled.
+- feat: Include commit hash and platform (`os/arch`) in `-v/--help` version output, in addition to the version string.
+
 ### v2.0.0-beta.1
 - fix: Correctly clean `<module>.egg-info` for hyphenated module names; the cleanup previously targeted a path that never matched, so it silently did nothing.
 - refactor: Address golangci-lint findings (safer error handling, drop deprecated Docker SDK type alias).
