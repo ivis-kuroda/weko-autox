@@ -223,7 +223,11 @@ func (r Runner) fetchCoverage(ctx context.Context, moduleName string, outputName
 		return "", err
 	}
 
-	re := regexp.MustCompile(`TOTAL\s+\d+\s+\d+\s+(\d+)%`)
+	// coverage.py adds Branch/BrPart columns to the TOTAL line when branch
+	// coverage is enabled (--cov-branch, see pytestCommonArgs), so the number
+	// of numeric columns before the percentage varies. Match any number of
+	// leading integer columns and capture the trailing "NN%".
+	re := regexp.MustCompile(`TOTAL\s+(?:\d+\s+)+(\d+)%`)
 	m := re.FindStringSubmatch(res.Stdout + "\n" + res.Stderr)
 	if len(m) < 2 {
 		return "0", nil
