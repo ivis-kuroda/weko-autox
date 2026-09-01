@@ -261,6 +261,11 @@ This project has been migrated from `autox.sh` to the Go-based `autox` CLI.
 
 
 ## Change Log
+### v2.0.0-beta.1
+- fix: Correctly clean `<module>.egg-info` for hyphenated module names; the cleanup previously targeted a path that never matched, so it silently did nothing.
+- refactor: Address golangci-lint findings (safer error handling, drop deprecated Docker SDK type alias).
+- ci: Harden CI and release workflows (scope CI to Go changes, fix a script injection risk).
+
 ### v2.0.0-alpha.3
 - feat: Restructure argument parsing to be positional-first, with stricter argument-order validation.
 - feat: Make `-p/--partial` a repeatable selector flag on one target module.

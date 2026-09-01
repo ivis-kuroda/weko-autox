@@ -10,6 +10,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-on-main
+  cancel-in-progress: false
+
 jobs:
   release:
     if: >
@@ -19,23 +23,25 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.merge_commit_sha }}
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
 
       - name: Derive version from merged release branch
         id: version
         shell: bash
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
 
-          head_ref="${{ github.event.pull_request.head.ref }}"
+          head_ref="$HEAD_REF"
           if [[ "$head_ref" =~ ^release/((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?)$ ]]; then
             version="${BASH_REMATCH[1]}"
           else
@@ -76,13 +82,14 @@ jobs:
         run: go test ./...
 
       - name: Prepare release notes from PR description
+        id: notes
         shell: bash
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           set -euo pipefail
 
-          notes_file="release-notes.md"
+          notes_file="$(mktemp /tmp/release-notes.XXXXXX.md)"
           {
             if [[ -n "${PR_BODY}" ]]; then
               echo "${PR_BODY}"
@@ -91,11 +98,13 @@ jobs:
             fi
           } > "$notes_file"
 
+          echo "file=$notes_file" >> "$GITHUB_OUTPUT"
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: latest
-          args: release --clean --release-notes release-notes.md
+          args: release --clean --release-notes "${{ steps.notes.outputs.file }}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
