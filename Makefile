@@ -6,6 +6,7 @@ PROJECT_NAME := autox
 MAIN_PKG := ./cmd/autox
 BINARY_PATH := ./dist/$(PROJECT_NAME)
 VERSION ?= dev
+COMMIT := $(shell git rev-parse --short=7 HEAD 2>/dev/null || echo none)
 BUILD_DIR := ./dist
 
 # Go build variables
@@ -14,7 +15,9 @@ GOOS := $(shell go env GOOS)
 GOARCH := $(shell go env GOARCH)
 
 # Build flags
-LDFLAGS := -s -w -X github.com/ivis-kuroda/weko-autox/internal/cli.versionString=$(VERSION)
+LDFLAGS := -s -w \
+	-X github.com/ivis-kuroda/weko-autox/internal/cli.versionString=$(VERSION) \
+	-X github.com/ivis-kuroda/weko-autox/internal/cli.commitString=$(COMMIT)
 
 help: ## Show this help message
 	@echo "$(PROJECT_NAME) - Build targets"

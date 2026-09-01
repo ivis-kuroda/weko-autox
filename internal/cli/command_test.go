@@ -3,6 +3,8 @@ package cli
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -170,6 +172,26 @@ func TestExecute_VersionSkipsRunner(t *testing.T) {
 	}
 	if out.String() == "" {
 		t.Fatal("version output should not be empty")
+	}
+}
+
+func TestExecute_VersionIncludesCommit(t *testing.T) {
+	var out bytes.Buffer
+
+	err := Execute(context.Background(), &out, []string{"-v"}, func(context.Context, Config) error {
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	// versionString/commitString are injected via -ldflags at build time
+	// (see Makefile/.goreleaser.yaml); in tests they retain their defaults.
+	// OS/arch come from runtime.GOOS/GOARCH, so compute them the same way
+	// rather than hardcoding a platform.
+	want := fmt.Sprintf("autox - dev, none %s/%s\n", runtime.GOOS, runtime.GOARCH)
+	if out.String() != want {
+		t.Fatalf("version output = %q, want %q", out.String(), want)
 	}
 }
 

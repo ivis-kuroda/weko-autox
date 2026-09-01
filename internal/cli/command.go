@@ -5,11 +5,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"runtime"
 
 	"github.com/spf13/cobra"
 )
 
 var versionString = "dev"
+var commitString = "none"
+
+func versionLine() string {
+	return fmt.Sprintf("autox - %s, %s %s/%s", versionString, commitString, runtime.GOOS, runtime.GOARCH)
+}
 
 func ParseArgs(args []string) (Config, error) {
 	if err := validateArgOrder(args); err != nil {
@@ -111,7 +117,7 @@ func Execute(ctx context.Context, out io.Writer, args []string, run func(context
 
 	if cfg.Help || cfg.Version {
 		if cfg.Version {
-			_, _ = fmt.Fprintf(out, "autox - %s\n", versionString)
+			_, _ = fmt.Fprintln(out, versionLine())
 		}
 		return nil
 	}
