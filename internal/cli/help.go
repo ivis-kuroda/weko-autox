@@ -8,7 +8,7 @@ import (
 
 //nolint:errcheck // help output is best-effort; there's nothing actionable to do if writing it fails
 func printStructuredHelp(out io.Writer) {
-	fmt.Fprintf(out, "autox - %s\n", versionString)
+	fmt.Fprintln(out, versionLine())
 	fmt.Fprintln(out)
 
 	fmt.Fprintln(out, "Usage:")

@@ -71,7 +71,7 @@ func TestRunnerRunAllAtOnce(t *testing.T) {
 	exec := &fakeExecutor{
 		outputs: map[string]dockerx.ExecResult{
 			"cd /code/modules/weko-admin; tox":                         {Stdout: "tox-ok"},
-			"cd /code/modules/weko-admin; .tox/c1/bin/coverage report": {Stdout: "TOTAL 10 1 90%"},
+			"cd /code/modules/weko-admin; .tox/c1/bin/coverage report": {Stdout: "TOTAL 10 1 4 0 90%"},
 		},
 		errors: map[string]error{},
 	}
@@ -96,7 +96,7 @@ func TestRunnerRunPerFile(t *testing.T) {
 	r := Runner{Workspace: workspace, Exec: exec, Progress: report.NewProgress(io.Discard)}
 
 	coverageCmd := "cd /code/modules/weko-items-ui; .tox/c1/bin/coverage report"
-	exec.outputs[coverageCmd] = dockerx.ExecResult{Stdout: "TOTAL 20 0 100%"}
+	exec.outputs[coverageCmd] = dockerx.ExecResult{Stdout: "TOTAL 20 0 6 0 100%"}
 
 	if err := r.Run(context.Background(), cfg); err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -121,7 +121,7 @@ func TestRunnerRunPartial(t *testing.T) {
 	pytestCmd := "cd /code/modules/weko-admin; .tox/c1/bin/pytest --cov=weko_admin tests/test_api.py::test_one tests/test_api.py::test_two -v -vv -s --cov-append --cov-branch --cov-report=term --cov-report=html -W ignore --basetemp=/code/modules/weko-admin/.tox/c1/tmp --full-trace"
 	coverageCmd := "cd /code/modules/weko-admin; .tox/c1/bin/coverage report"
 	exec.outputs[pytestCmd] = dockerx.ExecResult{Stdout: "ok"}
-	exec.outputs[coverageCmd] = dockerx.ExecResult{Stdout: "TOTAL 5 1 80%"}
+	exec.outputs[coverageCmd] = dockerx.ExecResult{Stdout: "TOTAL 5 1 2 1 80%"}
 
 	cfg := cli.Config{
 		RunMode:          cli.RunModeAllAtOnce,
@@ -145,7 +145,7 @@ func TestRunnerRunPartial_PerFunc(t *testing.T) {
 	r := Runner{Workspace: workspace, Exec: exec, Progress: report.NewProgress(io.Discard)}
 
 	coverageCmd := "cd /code/modules/weko-admin; .tox/c1/bin/coverage report"
-	exec.outputs[coverageCmd] = dockerx.ExecResult{Stdout: "TOTAL 5 1 80%"}
+	exec.outputs[coverageCmd] = dockerx.ExecResult{Stdout: "TOTAL 5 1 2 1 80%"}
 
 	cfg := cli.Config{
 		RunMode:          cli.RunModePerFunc,
@@ -165,6 +165,40 @@ func TestRunnerRunPartial_PerFunc(t *testing.T) {
 	}
 	assertFileExists(t, filepath.Join(workspace, "log", "weko-admin", "partial1.log"))
 	assertFileExists(t, filepath.Join(workspace, "log", "weko-admin", "partial2.log"))
+}
+
+func TestFetchCoverageBranchFormat(t *testing.T) {
+	// pytestCommonArgs enables --cov-branch, which makes coverage.py add
+	// Branch/BrPart columns to the TOTAL line:
+	//   Name    Stmts   Miss  Branch  BrPart  Cover
+	//   TOTAL      10      2       4       1    76%
+	// Regression test for the bug where coverage always reported 0% because
+	// the parsing regex only accounted for the no-branch, two-column format.
+	r := Runner{Workspace: t.TempDir(), Progress: report.NewProgress(io.Discard)}
+	exec := &fakeExecutor{outputs: map[string]dockerx.ExecResult{}, errors: map[string]error{}}
+	r.Exec = exec
+
+	moduleName := "weko-admin"
+	outDir := ""
+	if err := r.prepareModuleLogDir(moduleName, outDir); err != nil {
+		t.Fatalf("prepareModuleLogDir() error = %v", err)
+	}
+	cmd := "cd /code/modules/weko-admin; .tox/c1/bin/coverage report"
+	exec.outputs[cmd] = dockerx.ExecResult{Stdout: strings.Join([]string{
+		"Name                 Stmts   Miss Branch BrPart  Cover",
+		"--------------------------------------------------------",
+		"weko_admin/api.py       10      2      4      1    76%",
+		"--------------------------------------------------------",
+		"TOTAL                   10      2      4      1    76%",
+	}, "\n")}
+
+	coverage, err := r.fetchCoverage(context.Background(), moduleName, outDir)
+	if err != nil {
+		t.Fatalf("fetchCoverage() error = %v", err)
+	}
+	if coverage != "76" {
+		t.Fatalf("fetchCoverage() = %q, want %q", coverage, "76")
+	}
 }
 
 func TestFetchCoverageFallback(t *testing.T) {
@@ -332,7 +366,7 @@ func TestRunnerRunPartial_NonZeroExitStillCompletes(t *testing.T) {
 	exec := &fakeExecutor{
 		outputs: map[string]dockerx.ExecResult{
 			pytestCmd:   {Stdout: "failed test", ExitCode: 1},
-			coverageCmd: {Stdout: "TOTAL 10 2 80%"},
+			coverageCmd: {Stdout: "TOTAL 10 2 3 1 80%"},
 		},
 		errors: map[string]error{
 			pytestCmd: fmt.Errorf("exec failed with code 1"),
@@ -380,7 +414,7 @@ func TestRunnerRunAllAtOnce_NonZeroTestExitContinues(t *testing.T) {
 	exec := &fakeExecutor{
 		outputs: map[string]dockerx.ExecResult{
 			testCmd:     {Stdout: "FAILED tests", ExitCode: 1},
-			coverageCmd: {Stdout: "TOTAL 10 3 70%"},
+			coverageCmd: {Stdout: "TOTAL 10 3 5 2 70%"},
 		},
 		errors: map[string]error{
 			testCmd: fmt.Errorf("exec failed with code 1"),
@@ -417,7 +451,7 @@ func TestRunnerRunPerFile_NonZeroPytestContinuesAndLogsAll(t *testing.T) {
 	exec.outputs[pytestA] = dockerx.ExecResult{Stdout: "FAIL a", ExitCode: 1}
 	exec.errors[pytestA] = fmt.Errorf("exec failed with code 1")
 	exec.outputs[pytestB] = dockerx.ExecResult{Stdout: "PASS b"}
-	exec.outputs[coverageCmd] = dockerx.ExecResult{Stdout: "TOTAL 20 5 75%"}
+	exec.outputs[coverageCmd] = dockerx.ExecResult{Stdout: "TOTAL 20 5 8 3 75%"}
 
 	var out bytes.Buffer
 	r := Runner{Workspace: workspace, Exec: exec, Progress: report.NewProgress(&out)}

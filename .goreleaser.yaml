@@ -13,7 +13,9 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w -X github.com/ivis-kuroda/weko-autox/internal/cli.versionString={{ .Version }}
+      - -s -w
+      - -X github.com/ivis-kuroda/weko-autox/internal/cli.versionString={{ .Version }}
+      - -X github.com/ivis-kuroda/weko-autox/internal/cli.commitString={{ .ShortCommit }}
     env:
       - CGO_ENABLED=0
     goos:
